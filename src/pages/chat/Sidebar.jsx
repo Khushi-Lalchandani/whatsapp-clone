@@ -77,7 +77,7 @@ export default function Sidebar() {
                 {user.fullName || "Unknown"}
               </p>
               <p className="text-gray-400 text-sm">{user.email}</p>
-              {user.status && (
+              {/* {user.status && (
                 <span
                   className={`text-xs ${user.status.state === "online"
                       ? "text-green-400"
@@ -86,7 +86,7 @@ export default function Sidebar() {
                 >
                   {user.status.state}
                 </span>
-              )}
+              )} */}
             </div>
           </div>
         ))}
@@ -102,9 +102,9 @@ export default function Sidebar() {
       </div>
 
       {/* Profile Modal */}
-      <Profile 
-        isOpen={isProfileOpen} 
-        onClose={() => setIsProfileOpen(false)} 
+      <Profile
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
       />
     </div>
   );

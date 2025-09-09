@@ -12,6 +12,30 @@ const Profile = ({ isOpen, onClose }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [tempProfile, setTempProfile] = useState({});
 
+  // useEffect(() => {
+  //   if (!auth.currentUser) return;
+
+  //   const userRef = ref(database, `users/${auth.currentUser.uid}`);
+  //   const unsubscribe = onValue(userRef, (snapshot) => {
+  //     if (snapshot.exists()) {
+  //       const userData = snapshot.val();
+  //       setUserProfile({
+  //         fullName: userData.fullName || "",
+  //         email: userData.email || "",
+  //         profileImage: userData.profileImage || "",
+  //       });
+  //       setTempProfile({
+  //         fullName: userData.fullName || "",
+  //         email: userData.email || "",
+  //         profileImage: userData.profileImage || "",
+  //       });
+  //     }
+  //   });
+
+  //   return () => unsubscribe();
+  // }, []);
+
+
   useEffect(() => {
     if (!auth.currentUser) return;
 
@@ -25,8 +49,7 @@ const Profile = ({ isOpen, onClose }) => {
           profileImage: userData.profileImage || "",
         });
         setTempProfile({
-          fullName: userData.fullName || "",
-          email: userData.email || "",
+          // Only allow profileImage to be changed
           profileImage: userData.profileImage || "",
         });
       }
@@ -49,13 +72,30 @@ const Profile = ({ isOpen, onClose }) => {
     }
   };
 
+  // const handleSave = async () => {
+  //   if (!auth.currentUser) return;
+
+  //   try {
+  //     const userRef = ref(database, `users/${auth.currentUser.uid}`);
+  //     await update(userRef, {
+  //       fullName: tempProfile.fullName,
+  //       profileImage: tempProfile.profileImage,
+  //     });
+  //     setIsEditing(false);
+  //   } catch (error) {
+  //     console.error("Error updating profile:", error);
+  //     alert("Failed to update profile. Please try again.");
+  //   }
+  // };
+
+
   const handleSave = async () => {
     if (!auth.currentUser) return;
 
     try {
       const userRef = ref(database, `users/${auth.currentUser.uid}`);
       await update(userRef, {
-        fullName: tempProfile.fullName,
+        // Only update profileImage
         profileImage: tempProfile.profileImage,
       });
       setIsEditing(false);
@@ -65,15 +105,15 @@ const Profile = ({ isOpen, onClose }) => {
     }
   };
 
+
+
+
   const handleCancel = () => {
     setTempProfile({
-      fullName: userProfile.fullName,
-      email: userProfile.email,
       profileImage: userProfile.profileImage,
     });
     setIsEditing(false);
   };
-
   const removeProfileImage = () => {
     setTempProfile(prev => ({
       ...prev,
@@ -134,28 +174,19 @@ const Profile = ({ isOpen, onClose }) => {
         </div>
 
         {/* Profile Information */}
+
+
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">
               Full Name
             </label>
-            {isEditing ? (
-              <input
-                type="text"
-                value={tempProfile.fullName}
-                onChange={(e) =>
-                  setTempProfile(prev => ({ ...prev, fullName: e.target.value }))
-                }
-                className="w-full p-3 rounded-lg bg-black/40 border border-yellow-400 text-white focus:outline-none focus:border-yellow-300"
-              />
-            ) : (
-              <p className="p-3 rounded-lg bg-gray-800 text-white">
-                {userProfile.fullName || "Not set"}
-              </p>
-            )}
+            <p className="p-3 rounded-lg bg-gray-800 text-white">
+              {userProfile.fullName || "Not set"}
+            </p>
           </div>
 
-          <div>
+          {/* <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">
               Email
             </label>
@@ -163,9 +194,8 @@ const Profile = ({ isOpen, onClose }) => {
               {userProfile.email}
             </p>
             <small className="text-gray-500">Email cannot be changed</small>
-          </div>
+          </div> */}
         </div>
-
         {/* Action Buttons */}
         <div className="flex gap-3 mt-6">
           {isEditing ? (

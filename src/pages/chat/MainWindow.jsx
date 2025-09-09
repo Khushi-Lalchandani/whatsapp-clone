@@ -1,36 +1,135 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { auth, database } from "../../firebase/firebase";
-import { onValue, ref, push, set } from "firebase/database";
+import { onValue, ref, push, set, update } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import { encryptMessage, decryptMessage } from "../../utils/encryptUtils";
-import { setupPresence } from "../../utils/presence";
 import { Settings } from "lucide-react";
 import Profile from "../../components/Profile";
+
+
+function getLastSeenText(lastOnline) {
+  if (!lastOnline) return "Offline";
+  const now = Date.now();
+  const diffMs = now - lastOnline;
+  const diffSec = Math.floor(diffMs / 1000);
+
+  if (diffSec < 60) return "Last seen just now";
+  if (diffSec < 3600) return `Last seen ${Math.floor(diffSec / 60)} min ago`;
+  if (diffSec < 86400)
+    return `Last seen ${Math.floor(diffSec / 3600)} hour${Math.floor(diffSec / 3600) > 1 ? "s" : ""
+      } ago`;
+  return `Last seen ${Math.floor(diffSec / 86400)} day${Math.floor(diffSec / 86400) > 1 ? "s" : ""
+    } ago`;
+}
 
 export default function MainWindow() {
   const { chatId } = useParams();
   const [messages, setMessages] = useState([]);
   const [recipient, setRecipient] = useState(null);
   const [input, setInput] = useState("");
-  const [currentUser, setCurrentUser] = useState(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const generateChatId = (uid1, uid2) => {
     return uid1 < uid2 ? `${uid1}_${uid2}` : `${uid2}_${uid1}`;
   };
 
-  // Removed redundant presence setup - now handled globally in App.jsx
+  // Listen for messages and update status (delivered / seen)
+  // useEffect(() => {
+  //   let unsubscribe;
+  //   const authUnsub = onAuthStateChanged(auth, (user) => {
+  //     if (user && chatId) {
+  //       const chatKey = generateChatId(user.uid, chatId);
+  //       const messagesRef = ref(database, `chats/${chatKey}/messages`);
+  //       unsubscribe = onValue(messagesRef, (snapshot) => {
+  //         if (snapshot.exists()) {
+  //           const msgs = Object.values(snapshot.val());
+  //           setMessages(msgs);
+
+
+  //           msgs.forEach((msg) => {
+  //             if (msg.receiver === user.uid && msg.status === "sent") {
+  //               update(ref(database, `chats/${chatKey}/messages/${msg.id}`), {
+  //                 status: "delivered",
+  //               });
+  //             }
+  //           });
+
+  //           // Mark "delivered" → "seen" (if viewing this chat)
+  //           msgs.forEach((msg) => {
+  //             if (msg.receiver === user.uid && msg.status !== "seen") {
+  //               update(ref(database, `chats/${chatKey}/messages/${msg.id}`), {
+  //                 status: "seen",
+  //               });
+  //             }
+  //           });
+  //         } else {
+  //           setMessages([]);
+  //         }
+  //       });
+  //     }
+  //   });
+
+  //   return () => {
+  //     authUnsub();
+  //     if (unsubscribe) unsubscribe();
+  //   };
+  // }, [chatId]);
+
+
+  useEffect(() => {
+    if (!chatId || !auth.currentUser) return;
+    const userRef = ref(database, `users/${chatId}`);
+    const chatKey = generateChatId(auth.currentUser.uid, chatId);
+    const messagesRef = ref(database, `chats/${chatKey}/messages`);
+
+    const unsub = onValue(userRef, (snapshot) => {
+      const userData = snapshot.val();
+      if (userData?.status?.state === "online") {
+        // Recipient is online, mark all "sent" messages as "delivered"
+        onValue(messagesRef, (msgSnap) => {
+          if (msgSnap.exists()) {
+            const msgs = msgSnap.val();
+            Object.entries(msgs).forEach(([msgId, msg]) => {
+              if (
+                msg.receiver === chatId &&
+                msg.status === "sent"
+              ) {
+                update(ref(database, `chats/${chatKey}/messages/${msgId}`), {
+                  status: "delivered",
+                });
+              }
+            });
+          }
+        });
+      }
+    });
+
+    return () => unsub();
+  }, [chatId, auth.currentUser]);
+
   useEffect(() => {
     let unsubscribe;
     const authUnsub = onAuthStateChanged(auth, (user) => {
       if (user && chatId) {
         const chatKey = generateChatId(user.uid, chatId);
-
         const messagesRef = ref(database, `chats/${chatKey}/messages`);
         unsubscribe = onValue(messagesRef, (snapshot) => {
           if (snapshot.exists()) {
-            setMessages(Object.values(snapshot.val()));
+            const msgs = Object.values(snapshot.val());
+            setMessages(msgs);
+
+            // Mark "delivered" → "seen" (if viewing this chat)
+            msgs.forEach((msg) => {
+              if (
+                msg.receiver === user.uid &&
+                msg.status === "delivered"
+              ) {
+                update(ref(database, `chats/${chatKey}/messages/${msg.id}`), {
+                  status: "seen",
+                });
+              }
+            });
           } else {
             setMessages([]);
           }
@@ -43,41 +142,26 @@ export default function MainWindow() {
       if (unsubscribe) unsubscribe();
     };
   }, [chatId]);
-
-
-
+  // Listen for recipient info
   useEffect(() => {
     if (!chatId) return;
-
-    // Fetch recipient details
     const userRef = ref(database, `users/${chatId}`);
-    onValue(userRef, (snapshot) => {
+    const unsub = onValue(userRef, (snapshot) => {
       if (snapshot.exists()) {
         setRecipient(snapshot.val());
-        const currentEmail = localStorage.getItem("user");
-        for (let key in snapshot.val()) {
-          if (snapshot.val()[key].userEmail !== currentEmail) {
-            setCurrentUser(snapshot.val());
-          }
-        }
       }
     });
+    return () => unsub();
   }, [chatId]);
-
-
 
   const handleSend = async () => {
     if (!input.trim()) return;
-
     const currentUserId = auth.currentUser?.uid;
-    console.log(currentUserId);
     const chatKey = generateChatId(currentUserId, chatId);
     const messageRef = ref(database, `chats/${chatKey}/messages`);
     const newMessageRef = push(messageRef);
 
-
     const encryptedMessage = encryptMessage(input);
-    console.log(encryptedMessage);
 
     const messageObj = {
       id: newMessageRef.key,
@@ -85,13 +169,12 @@ export default function MainWindow() {
       receiver: chatId,
       text: encryptedMessage,
       time: Date.now(),
+      status: "sent",
     };
 
     await set(newMessageRef, messageObj);
     setInput("");
   };
-
-
 
   if (!chatId) {
     return (
@@ -107,10 +190,11 @@ export default function MainWindow() {
             <Settings size={20} />
           </button>
         </div>
-        
         <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-black to-gray-900">
           <div className="text-center">
-            <h2 className="text-2xl text-gray-400 mb-4">Select a chat to start messaging</h2>
+            <h2 className="text-2xl text-gray-400 mb-4">
+              Select a chat to start messaging
+            </h2>
             <button
               onClick={() => setIsProfileOpen(true)}
               className="hidden md:inline-flex items-center gap-2 px-4 py-2 bg-yellow-500 text-black rounded-lg hover:bg-yellow-400 transition"
@@ -120,11 +204,10 @@ export default function MainWindow() {
             </button>
           </div>
         </div>
-
         {/* Profile Modal */}
-        <Profile 
-          isOpen={isProfileOpen} 
-          onClose={() => setIsProfileOpen(false)} 
+        <Profile
+          isOpen={isProfileOpen}
+          onClose={() => setIsProfileOpen(false)}
         />
       </div>
     );
@@ -150,7 +233,9 @@ export default function MainWindow() {
                 : "text-gray-400"
                 }`}
             >
-              {recipient.status?.state === "online" ? "Online" : "Offline"}
+              {recipient.status?.state === "online"
+                ? "Online"
+                : getLastSeenText(recipient.status?.last_changed)}
             </span>
           </div>
           {/* Mobile Settings Button */}
@@ -164,13 +249,15 @@ export default function MainWindow() {
         </div>
       )}
 
-
       {/* Messages */}
       <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-4 bg-gradient-to-br from-black to-gray-900">
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`flex ${msg.sender === auth.currentUser?.uid ? "justify-end" : "justify-start"}`}
+            className={`flex ${msg.sender === auth.currentUser?.uid
+              ? "justify-end"
+              : "justify-start"
+              }`}
           >
             <div
               className={`rounded-2xl px-4 py-2 max-w-xs shadow-md ${msg.sender === auth.currentUser?.uid
@@ -178,16 +265,26 @@ export default function MainWindow() {
                 : "bg-gray-800 text-white border border-yellow-600"
                 }`}
             >
-
               <p>{decryptMessage(msg.text)}</p>
-              <span className="block text-xs text-gray-300 mt-1">
-                {msg.time
-                  ? new Date(msg.time).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                  : "sending..."}
-              </span>
+              <div className="flex justify-between items-center mt-1">
+                <span className="text-xs text-gray-300">
+                  {msg.time
+                    ? new Date(msg.time).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                    : "sending..."}
+                </span>
+                {msg.sender === auth.currentUser?.uid && (
+                  <span className="text-xs ml-2">
+                    {msg.status === "sent" && "✓"}
+                    {msg.status === "delivered" && "✓✓"}
+                    {msg.status === "seen" && (
+                      <span className="text-blue-400">✓✓</span>
+                    )}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         ))}
@@ -211,9 +308,9 @@ export default function MainWindow() {
       </div>
 
       {/* Profile Modal */}
-      <Profile 
-        isOpen={isProfileOpen} 
-        onClose={() => setIsProfileOpen(false)} 
+      <Profile
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
       />
     </div>
   );
