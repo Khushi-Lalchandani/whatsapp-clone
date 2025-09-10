@@ -34,49 +34,6 @@ export default function MainWindow() {
     return uid1 < uid2 ? `${uid1}_${uid2}` : `${uid2}_${uid1}`;
   };
 
-  // Listen for messages and update status (delivered / seen)
-  // useEffect(() => {
-  //   let unsubscribe;
-  //   const authUnsub = onAuthStateChanged(auth, (user) => {
-  //     if (user && chatId) {
-  //       const chatKey = generateChatId(user.uid, chatId);
-  //       const messagesRef = ref(database, `chats/${chatKey}/messages`);
-  //       unsubscribe = onValue(messagesRef, (snapshot) => {
-  //         if (snapshot.exists()) {
-  //           const msgs = Object.values(snapshot.val());
-  //           setMessages(msgs);
-
-
-  //           msgs.forEach((msg) => {
-  //             if (msg.receiver === user.uid && msg.status === "sent") {
-  //               update(ref(database, `chats/${chatKey}/messages/${msg.id}`), {
-  //                 status: "delivered",
-  //               });
-  //             }
-  //           });
-
-  //           // Mark "delivered" → "seen" (if viewing this chat)
-  //           msgs.forEach((msg) => {
-  //             if (msg.receiver === user.uid && msg.status !== "seen") {
-  //               update(ref(database, `chats/${chatKey}/messages/${msg.id}`), {
-  //                 status: "seen",
-  //               });
-  //             }
-  //           });
-  //         } else {
-  //           setMessages([]);
-  //         }
-  //       });
-  //     }
-  //   });
-
-  //   return () => {
-  //     authUnsub();
-  //     if (unsubscribe) unsubscribe();
-  //   };
-  // }, [chatId]);
-
-
   useEffect(() => {
     if (!chatId || !auth.currentUser) return;
     const userRef = ref(database, `users/${chatId}`);
