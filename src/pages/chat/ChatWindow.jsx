@@ -1,16 +1,25 @@
 import React from "react";
 import Sidebar from "./Sidebar";
 import MainWindow from "./MainWindow";
+import GroupChatWindow from "./GroupChatWindow";
+import { useParams, useLocation } from "react-router-dom";
 
 const ChatWindow = () => {
+  const { chatId, groupId } = useParams();
+  const location = useLocation();
+
+  let MainComponent = <MainWindow />;
+  if (location.pathname.startsWith("/chat/group/") && groupId) {
+    MainComponent = <GroupChatWindow />;
+  } else if (chatId) {
+    MainComponent = <MainWindow />;
+  }
+
   return (
     <div className="flex h-screen bg-black text-white">
-      {/* Sidebar */}
       <Sidebar />
-
-      {/* Main Chat Window */}
       <div className="flex-1 flex flex-col">
-        <MainWindow />
+        {MainComponent}
       </div>
     </div>
   );

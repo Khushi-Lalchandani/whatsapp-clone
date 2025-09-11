@@ -7,6 +7,8 @@ import React, { useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase/firebase';
 import { setupPresence } from './utils/presence';
+import CreateGroupModal from './components/CreateGroupModal';
+import MainWindow from './pages/chat/MainWindow';
 
 function App() {
 
@@ -14,7 +16,7 @@ function App() {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       console.log(user);
       setIsAuthenticated(!!user);
-      
+
       // Set up presence for authenticated users
       if (user) {
         setupPresence(user.uid, true);
@@ -42,11 +44,9 @@ function App() {
 
       <Routes>
         <Route path="/" element={<Login />} />
-        {/* <Route element={<ProtectedRoutes isAuthenticated={isAuthenticated} />}> */}
         <Route path="/chat" element={<ChatWindow />} />
         <Route path="/chat/:chatId" element={<ChatWindow />} />
-
-        {/* </Route> */}
+        <Route path="/chat/group/:groupId" element={<ChatWindow />} />
       </Routes>
     </BrowserRouter>
   );
