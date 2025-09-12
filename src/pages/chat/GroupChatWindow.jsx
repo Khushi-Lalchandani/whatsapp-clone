@@ -16,6 +16,7 @@ export default function GroupChatWindow() {
   const [group, setGroup] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
+  const [groupUsers, setGroupUsers] = useState({});
 
   // Fetch group info
   useEffect(() => {
@@ -26,6 +27,23 @@ export default function GroupChatWindow() {
     });
     return () => unsub();
   }, [groupId]);
+
+  // Fetch group users info
+  useEffect(() => {
+    if (!group || !group.members) return;
+    const usersRef = ref(database, "users");
+    const unsub = onValue(usersRef, (snap) => {
+      if (snap.exists()) {
+        const allUsers = snap.val();
+        const filtered = {};
+        group.members.forEach(uid => {
+          if (allUsers[uid]) filtered[uid] = allUsers[uid];
+        });
+        setGroupUsers(filtered);
+      }
+    });
+    return () => unsub();
+  }, [group]);
 
   // Fetch messages and mark as seen
   useEffect(() => {
@@ -38,7 +56,6 @@ export default function GroupChatWindow() {
         const msgsArr = Object.values(msgsObj);
         setMessages(msgsArr);
 
-        // Mark unseen messages as seen by current user
         Object.entries(msgsObj).forEach(([msgId, msg]) => {
           if (!msg.seenBy?.includes(currentUid)) {
             update(ref(database, `groups/${groupId}/messages/${msgId}`), {
@@ -82,7 +99,8 @@ export default function GroupChatWindow() {
       {/* Group Header */}
       <div className="flex items-center gap-3 p-3 border-b border-yellow-600 bg-black">
         <div className="w-10 h-10 rounded-full bg-yellow-500 flex items-center justify-center font-bold text-black text-xl border border-yellow-500">
-          <img src={group.groupImage} alt="" className="w-10 h-10 rounded-full object-cover" />
+          {group.groupImage ?
+            (<img src={group.groupImage} alt="" className="w-10 h-10 rounded-full object-cover" />) : (group.name[0] || 'G')}
         </div>
         <div className="flex flex-col flex-1">
           <h2 className="text-lg font-semibold text-yellow-400">{group.name}</h2>
@@ -94,8 +112,13 @@ export default function GroupChatWindow() {
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`flex ${msg.sender === auth.currentUser?.uid ? "justify-end" : "justify-start"}`}
+            className={`flex flex-col ${msg.sender === auth.currentUser?.uid ? "items-end" : "items-start"}`}
           >
+            {msg.sender !== auth.currentUser?.uid && (
+              <span className="text-xs font-semibold text-yellow-400 mb-1 ml-2">
+                {groupUsers[msg.sender]?.fullName || groupUsers[msg.sender]?.email || "Unknown"}
+              </span>
+            )}
             <div
               className={`rounded-2xl px-4 py-2 max-w-xs shadow-md ${msg.sender === auth.currentUser?.uid
                 ? "bg-yellow-500 text-black"

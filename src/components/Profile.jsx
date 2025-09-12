@@ -140,6 +140,8 @@ const Profile = ({ isOpen, onClose }) => {
         {/* Profile Image Section */}
         <div className="flex flex-col items-center mb-6">
           <div className="relative">
+
+
             <img
               src={
                 tempProfile.profileImage ||

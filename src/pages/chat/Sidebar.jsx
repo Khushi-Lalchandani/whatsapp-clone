@@ -158,11 +158,12 @@ export default function Sidebar() {
       type: "group",
       id: group.id,
       name: group.name,
+
       avatar: group.groupImage || null,
       lastMsgTime: groupMeta[group.id]?.lastMsgTime || 0,
       unreadCount: groupMeta[group.id]?.unreadCount || 0,
       members: group.members,
-      createdAt: group.createdAt || 0, // <-- add this line
+      createdAt: group.createdAt || 0,
     })),
   ];
 
@@ -235,10 +236,11 @@ export default function Sidebar() {
               onClick={() => navigate(`/chat/group/${chat.id}`)}
               className="flex items-center gap-3 p-4 border-b border-yellow-600 hover:bg-gray-800 cursor-pointer transition relative"
             >
-              <div className="w-12 h-12 rounded-full bg-yellow-500 flex items-center justify-center font-bold text-black text-xl border border-yellow-500">
-                {chat.name[0] || "G"}
-              </div>
+              {/* <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-black text-xl border border-yellow-500"> */}
+              <img src={chat.avatar} className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-black text-xl border border-yellow-500" alt="" />
+              {/* </div> */}
               <div className="flex-1">
+                <img src={chat.groupImage} alt="" />
                 <p className="font-semibold text-yellow-400">{chat.name}</p>
                 <p className="text-gray-400 text-sm">
                   {chat.members.length} members

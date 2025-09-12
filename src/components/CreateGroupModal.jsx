@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { ref, set, push, onValue } from "firebase/database";
 import { database, auth } from "../firebase/firebase";
 
+
 export default function CreateGroupModal({ isOpen, onClose }) {
   const [groupName, setGroupName] = useState("");
   const [users, setUsers] = useState([]);
@@ -37,7 +38,18 @@ export default function CreateGroupModal({ isOpen, onClose }) {
         : [...prev, uid]
     );
   };
-
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setLoading(true);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setGroupImage(reader.result);
+        setLoading(false);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
   const handleCreateGroup = async () => {
     if (!groupName.trim() || selectedUsers.length === 0) return;
     setLoading(true);
@@ -51,15 +63,15 @@ export default function CreateGroupModal({ isOpen, onClose }) {
       id: groupId,
       name: groupName,
       members,
-      groupImage: groupImage,
+      groupImage: groupImage || '',
       createdBy: currentUid,
       createdAt: now,
-      lastMsgTime: now, // <-- Add this line
+      lastMsgTime: now,
       messages: {},
     });
-
     setLoading(false);
     setGroupName("");
+    setGroupImage('');
     setSelectedUsers([]);
     onClose();
   };
@@ -74,6 +86,14 @@ export default function CreateGroupModal({ isOpen, onClose }) {
           placeholder="Group Name"
           value={groupName}
           onChange={(e) => setGroupName(e.target.value)}
+          className="w-full mb-4 px-3 py-2 rounded-lg border border-yellow-600 bg-black text-yellow-400"
+        />
+
+        <input
+          id="profile-upload"
+          type="file"
+          accept="image/*"
+          onChange={handleImageUpload}
           className="w-full mb-4 px-3 py-2 rounded-lg border border-yellow-600 bg-black text-yellow-400"
         />
         <div className="mb-4">
@@ -108,4 +128,4 @@ export default function CreateGroupModal({ isOpen, onClose }) {
       </div>
     </div>
   );
-}
+};
