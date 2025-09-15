@@ -17,7 +17,7 @@ export default function Sidebar() {
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const navigate = useNavigate();
 
-
+  // Fetch users
   useEffect(() => {
     const usersRef = ref(database, "users");
     const unsubscribe = onValue(usersRef, (snapshot) => {
@@ -39,7 +39,7 @@ export default function Sidebar() {
     return () => unsubscribe();
   }, []);
 
-
+  // Fetch chat meta (last message time & unread count) for users
   useEffect(() => {
     const currentUid = auth.currentUser?.uid;
     if (!currentUid || users.length === 0) return;
@@ -84,7 +84,7 @@ export default function Sidebar() {
     };
   }, [users, auth.currentUser]);
 
-
+  // Fetch groups where current user is a member
   useEffect(() => {
     const currentUid = auth.currentUser?.uid;
     if (!currentUid) return;
@@ -123,7 +123,6 @@ export default function Sidebar() {
               lastMsgTime = msg.time;
               lastSender = msg.sender;
             }
-
             if (msg.sender !== currentUid && (!msg.seenBy || !msg.seenBy.includes(currentUid))) {
               unreadCount++;
             }
@@ -142,13 +141,12 @@ export default function Sidebar() {
     };
   }, [groups, auth.currentUser]);
 
-
   const chatList = [
     ...users.map((user) => ({
       type: "user",
       id: user.uid,
       name: user.fullName || user.email,
-      avatar: user.profileImage || "https:
+      avatar: user.profileImage || "https://via.placeholder.com/40/FFD700/000000?text=U",
       lastMsgTime: chatMeta[user.uid]?.lastMsgTime || 0,
       unreadCount: chatMeta[user.uid]?.unreadCount || 0,
       members: [],
@@ -166,7 +164,6 @@ export default function Sidebar() {
       createdAt: group.createdAt || 0,
     })),
   ];
-
 
   const sortedChats = chatList.sort((a, b) => {
     const aTime = a.lastMsgTime || a.createdAt || 0;
@@ -236,9 +233,9 @@ export default function Sidebar() {
               onClick={() => navigate(`/chat/group/${chat.id}`)}
               className="flex items-center gap-3 p-4 border-b border-yellow-600 hover:bg-gray-800 cursor-pointer transition relative"
             >
-              {/* <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-black text-xl border border-yellow-500"> */}
+
               <img src={chat.avatar} className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-black text-xl border border-yellow-500" alt="" />
-              {/* </div> */}
+
               <div className="flex-1">
                 <img src={chat.groupImage} alt="" />
                 <p className="font-semibold text-yellow-400">{chat.name}</p>
@@ -279,7 +276,6 @@ export default function Sidebar() {
         )}
       </div>
 
-      {/* Create Group Modal */}
       {isGroupModalOpen && (
         <CreateGroupModal
           isOpen={isGroupModalOpen}
@@ -287,7 +283,6 @@ export default function Sidebar() {
         />
       )}
 
-      {/* Profile Modal */}
       <Profile
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}

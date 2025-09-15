@@ -233,7 +233,7 @@ export default function MainWindow() {
       {recipient && (
         <div className="flex items-center gap-3 p-3 border-b border-yellow-600 bg-black">
           <img
-            src={recipient.profileImage || "https:
+            src={recipient.profileImage || "https:"}
             alt="profile"
             className="w-10 h-10 rounded-full border border-yellow-500"
           />
