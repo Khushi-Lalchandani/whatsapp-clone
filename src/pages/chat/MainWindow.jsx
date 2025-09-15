@@ -9,8 +9,11 @@ import { auth, database } from "../../firebase/firebase";
 import { onValue, ref, push, set, update } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import { encryptMessage, decryptMessage } from "../../utils/encryptUtils";
-import { Settings } from "lucide-react";
+import { Settings, Plus } from "lucide-react";
 import Profile from "../../components/Profile";
+import UserPreview from "./UserPreview";
+import FileUploadModal from "../../components/FileUploadModal";
+import FilePreview from "../../components/FilePreview";
 
 function getLastSeenText(lastOnline) {
   if (!lastOnline) return "Offline";
@@ -33,6 +36,9 @@ export default function MainWindow() {
   const [input, setInput] = useState("");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [menuOpenMsgId, setMenuOpenMsgId] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [isFileModalOpen, setIsFileModalOpen] = useState(false);
+  const [statusCheckInterval, setStatusCheckInterval] = useState(null);
 
   const generateChatId = (uid1, uid2) => {
     return uid1 < uid2 ? `${uid1}_${uid2}` : `${uid2}_${uid1}`;
@@ -40,37 +46,131 @@ export default function MainWindow() {
 
   //notes: first when there is need to change the data in realtime, start with taking reference of the database where you need to make changes. then start with checking whether the database is available, then take it's snapshot to set, get, or update the values.
 
+  // Update message status to 'delivered' when recipient is online
   useEffect(() => {
     if (!chatId || !auth.currentUser) return;
     const userRef = ref(database, `users/${chatId}`);
     const chatKey = generateChatId(auth.currentUser.uid, chatId);
     const messagesRef = ref(database, `chats/${chatKey}/messages`);
 
-    const unsub = onValue(userRef, (snapshot) => {
+    let messagesUnsubscribe = null;
+
+    const userStatusUnsub = onValue(userRef, (snapshot) => {
       const userData = snapshot.val();
-      if (userData?.status?.state === "online") {
-        onValue(messagesRef, (msgSnap) => {
-          if (msgSnap.exists()) {
-            const msgs = msgSnap.val();
-            Object.entries(msgs).forEach(([msgId, msg]) => {
-              if (
-                msg.receiver === chatId &&
-                msg.status === "sent"
-              ) {
-                update(ref(database, `chats/${chatKey}/messages/${msgId}`), {
-                  status: "delivered",
-                });
-              }
-            });
-          }
-        });
+      
+      // Check if user exists and has a valid status
+      const isRecipientOnline = userData?.status?.state === "online";
+      
+      // Additional check: if no status exists, treat as offline
+      // This handles cases where user is completely disconnected
+      const hasValidStatus = userData?.status && userData?.status?.state;
+      
+      // Check if status is too old (user might be disconnected but status not updated)
+      const statusAge = userData?.status?.last_changed ? Date.now() - userData?.status?.last_changed : Infinity;
+      const isStatusFresh = statusAge < 30000; // Consider status stale after 30 seconds
+      
+      const finalOnlineStatus = hasValidStatus && isRecipientOnline && isStatusFresh;
+      
+      // Clean up previous messages listener
+      if (messagesUnsubscribe) {
+        messagesUnsubscribe();
       }
+      
+      // Set up new messages listener
+      messagesUnsubscribe = onValue(messagesRef, (msgSnap) => {
+        if (msgSnap.exists()) {
+          const msgs = msgSnap.val();
+          const updates = {};
+          
+          Object.entries(msgs).forEach(([msgId, msg]) => {
+            if (
+              msg.receiver === chatId &&
+              msg.sender === auth.currentUser.uid
+            ) {
+              // If user is online and message is sent, mark as delivered
+              if (finalOnlineStatus && msg.status === "sent") {
+                updates[`${msgId}/status`] = "delivered";
+              }
+              // If user goes offline and message was delivered (but not seen), revert to sent
+              else if (!finalOnlineStatus && msg.status === "delivered") {
+                updates[`${msgId}/status`] = "sent";
+              }
+            }
+          });
+          
+          // Batch update all status changes
+          if (Object.keys(updates).length > 0) {
+            update(messagesRef, updates);
+          }
+        }
+      });
     });
 
-    return () => unsub();
+    return () => {
+      userStatusUnsub();
+      if (messagesUnsubscribe) {
+        messagesUnsubscribe();
+      }
+    };
   }, [chatId, auth.currentUser]);
 
+  // Add a periodic check to ensure message statuses are correct
+  useEffect(() => {
+    if (!chatId || !auth.currentUser) return;
+    
+    const checkMessageStatuses = async () => {
+      const userRef = ref(database, `users/${chatId}`);
+      const chatKey = generateChatId(auth.currentUser.uid, chatId);
+      const messagesRef = ref(database, `chats/${chatKey}/messages`);
+      
+      try {
+        const userSnap = await new Promise(resolve => {
+          onValue(userRef, snap => resolve(snap), { onlyOnce: true });
+        });
+        
+        const msgSnap = await new Promise(resolve => {
+          onValue(messagesRef, snap => resolve(snap), { onlyOnce: true });
+        });
+        
+        const userData = userSnap.val();
+        const statusAge = userData?.status?.last_changed ? Date.now() - userData?.status?.last_changed : Infinity;
+        const isOnline = userData?.status?.state === "online" && statusAge < 30000;
+        
+        if (msgSnap.exists()) {
+          const msgs = msgSnap.val();
+          const updates = {};
+          
+          Object.entries(msgs).forEach(([msgId, msg]) => {
+            if (msg.receiver === chatId && msg.sender === auth.currentUser.uid) {
+              // Force offline messages back to sent if user is clearly offline
+              if (!isOnline && msg.status === "delivered") {
+                updates[`${msgId}/status`] = "sent";
+              }
+            }
+          });
+          
+          if (Object.keys(updates).length > 0) {
+            await update(messagesRef, updates);
+          }
+        }
+      } catch (error) {
+        console.error('Error in periodic status check:', error);
+      }
+    };
+    
+    // Check immediately and then every 10 seconds
+    checkMessageStatuses();
+    const interval = setInterval(checkMessageStatuses, 10000);
+    setStatusCheckInterval(interval);
+    
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [chatId, auth.currentUser]);
 
+  // Load messages and mark as seen when current user opens the chat
   useEffect(() => {
     let unsubscribe;
     const authUnsub = onAuthStateChanged(auth, (user) => {
@@ -86,10 +186,11 @@ export default function MainWindow() {
             );
             setMessages(filteredMsgs);
 
-
+            // Only mark as seen if current user is the receiver and the message was delivered
             filteredMsgs.forEach((msg) => {
               if (
                 msg.receiver === user.uid &&
+                msg.sender === chatId &&
                 msg.status === "delivered"
               ) {
                 update(ref(database, `chats/${chatKey}/messages/${msg.id}`), {
@@ -107,6 +208,10 @@ export default function MainWindow() {
     return () => {
       authUnsub();
       if (unsubscribe) unsubscribe();
+      // Clean up status check interval
+      if (statusCheckInterval) {
+        clearInterval(statusCheckInterval);
+      }
     };
   }, [chatId]);
 
@@ -159,6 +264,31 @@ export default function MainWindow() {
     setInput("");
   };
 
+  const handleFileSend = async (fileData) => {
+    const currentUserId = auth.currentUser?.uid;
+    const chatKey = generateChatId(currentUserId, chatId);
+    const messageRef = ref(database, `chats/${chatKey}/messages`);
+    const newMessageRef = push(messageRef);
+
+    const messageObj = {
+      id: newMessageRef.key,
+      sender: currentUserId,
+      receiver: chatId,
+      text: fileData.message ? encryptMessage(fileData.message) : '',
+      time: Date.now(),
+      status: "sent",
+      fileData: {
+        fileName: fileData.fileName,
+        fileSize: fileData.fileSize,
+        fileType: fileData.fileType,
+        fileContent: fileData.fileContent
+      },
+      messageType: 'file'
+    };
+
+    await set(newMessageRef, messageObj);
+  };
+
 
   const handleDeleteForMe = async (msgId) => {
     const currentUserId = auth.currentUser?.uid;
@@ -185,6 +315,7 @@ export default function MainWindow() {
     const msgRef = ref(database, `chats/${chatKey}/messages/${msgId}`);
     await update(msgRef, {
       text: "",
+      fileData: null,
       deletedForEveryone: true,
     });
     setMenuOpenMsgId(null);
@@ -231,14 +362,15 @@ export default function MainWindow() {
     <div className="flex flex-col h-full">
       {/* Chat Header */}
       {recipient && (
-        <div className="flex items-center gap-3 p-3 border-b border-yellow-600 bg-black">
+        <div className="flex items-center gap-3 p-3 border-b border-yellow-600 bg-black" onClick={() => setShowPreview(true)
+        }>
           <img
             src={recipient.profileImage || "https:"}
             alt="profile"
             className="w-10 h-10 rounded-full border border-yellow-500"
           />
           <div className="flex flex-col flex-1">
-            <h2 className="text-lg font-semibold text-white">
+            <h2 className="text-lg font-semibold text-white" >
               {recipient.fullName || recipient.email}
             </h2>
             <span
@@ -260,6 +392,14 @@ export default function MainWindow() {
           >
             <Settings size={20} />
           </button>
+          {showPreview && recipient && (
+            <UserPreview
+              isOpen={showPreview}
+              onClose={() => setShowPreview(false)}
+              user={{ ...recipient, uid: chatId }}
+            />
+          )}
+
         </div>
       )}
 
@@ -285,11 +425,31 @@ export default function MainWindow() {
                   }`}
               >
                 <div className="flex items-start justify-between">
-                  <p>
-                    {isDeletedForEveryone
-                      ? <span className="italic text-gray-400">this message has been deleted</span>
-                      : decryptMessage(msg.text)}
-                  </p>
+                  {msg.messageType === 'file' ? (
+                    <div className="flex flex-col gap-2">
+                      {!isDeletedForEveryone ? (
+                        <FilePreview
+                          fileData={msg.fileData}
+                          isOwn={msg.sender === auth.currentUser?.uid}
+                        />
+                      ) : (
+                        <span className="italic text-gray-400">this file has been deleted</span>
+                      )}
+                      {msg.text && (
+                        <p className="mt-2">
+                          {isDeletedForEveryone
+                            ? <span className="italic text-gray-400">this message has been deleted</span>
+                            : decryptMessage(msg.text)}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p>
+                      {isDeletedForEveryone
+                        ? <span className="italic text-gray-400">this message has been deleted</span>
+                        : decryptMessage(msg.text)}
+                    </p>
+                  )}
                   {/* Three dots menu */}
                   <button
                     className="ml-2 text-gray-400 hover:text-yellow-500"
@@ -304,14 +464,14 @@ export default function MainWindow() {
                       className="absolute right-0 top-8 bg-black border border-yellow-600 rounded shadow-lg z-10"
                     >
                       <button
-                        className="block px-4 py-2 text-left w-full hover:bg-gray-800 text-white"
+                        className="block px-4 py-2 text-left w-full hover:bg-gray-800 text-white text-nowrap"
                         onClick={() => handleDeleteForMe(msg.id)}
                       >
                         Delete for me
                       </button>
                       {msg.sender === auth.currentUser?.uid && !isDeletedForEveryone && (
                         <button
-                          className="block px-4 py-2 text-left w-full hover:bg-gray-800 text-red-400"
+                          className="block px-4 py-2 text-left w-full hover:bg-gray-800 text-red-400 text-nowrap"
                           onClick={() => handleDeleteForEveryone(msg.id)}
                         >
                           Delete for everyone
@@ -346,17 +506,25 @@ export default function MainWindow() {
       </div>
 
       {/* Input */}
-      <div className="p-3 border-t border-yellow-600 bg-black flex gap-2">
+      <div className="p-3 border-t border-yellow-600 bg-black flex gap-2 items-center">
+        <button
+          onClick={() => setIsFileModalOpen(true)}
+          className="hover:text-yellow-50 p-2 hover:bg-gray-800 rounded-lg transition"
+          title="Share File"
+        >
+          <Plus size={24} />
+        </button>
         <input
           type="text"
           placeholder="Type a message..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && handleSend()}
           className="flex-1 rounded-xl px-4 py-2 bg-gray-900 text-white focus:outline-none border border-yellow-600"
         />
         <button
           onClick={handleSend}
-          className="bg-yellow-500 text-black rounded-xl px-6 flex items-center justify-center hover:bg-yellow-400 transition"
+          className="h-full bg-yellow-500 text-black rounded-xl px-6 flex items-center justify-center hover:bg-yellow-400 transition"
         >
           Send
         </button>
@@ -367,6 +535,16 @@ export default function MainWindow() {
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
       />
+
+      {/* File Upload Modal */}
+      <FileUploadModal
+        isOpen={isFileModalOpen}
+        onClose={() => setIsFileModalOpen(false)}
+        onSend={handleFileSend}
+      />
+
+
     </div>
+
   );
 }

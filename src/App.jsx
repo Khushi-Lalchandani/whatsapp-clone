@@ -9,6 +9,8 @@ import { auth } from './firebase/firebase';
 import { setupPresence } from './utils/presence';
 import CreateGroupModal from './components/CreateGroupModal';
 import MainWindow from './pages/chat/MainWindow';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 function App() {
 
@@ -41,13 +43,29 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   return (
     <BrowserRouter>
-
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/chat" element={<ChatWindow />} />
         <Route path="/chat/:chatId" element={<ChatWindow />} />
         <Route path="/chat/group/:groupId" element={<ChatWindow />} />
       </Routes>
+      <ToastContainer
+        position="top-center"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="dark"
+        toastStyle={{
+          background: '#1f1f1f',
+          color: '#fbbf24',
+          border: '1px solid #eab308'
+        }}
+      />
     </BrowserRouter>
   );
 }

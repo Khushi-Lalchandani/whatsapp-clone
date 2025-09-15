@@ -2,12 +2,36 @@ import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { database, auth } from "../../firebase/firebase";
 import { ref, onValue, push, set, update } from "firebase/database";
+import { Plus } from "lucide-react";
+import FileUploadModal from "../../components/FileUploadModal";
+import FilePreview from "../../components/FilePreview";
 
-function getMessageStatus(msg, totalMembers) {
+function getMessageStatus(msg, totalMembers, onlineMembers = []) {
   if (!msg.seenBy) return "sent";
   const seenCount = msg.seenBy.length;
-  if (seenCount === totalMembers) return "seen";
-  if (seenCount >= Math.ceil(totalMembers / 2)) return "delivered";
+  
+  // Count how many online members (excluding sender) have seen the message
+  const onlineMembersWhoSaw = msg.seenBy.filter(uid => 
+    uid !== msg.sender && onlineMembers.includes(uid)
+  ).length;
+  
+  const totalOnlineMembers = onlineMembers.filter(uid => uid !== msg.sender).length;
+  
+  // If all online members have seen it, mark as seen
+  if (totalOnlineMembers > 0 && onlineMembersWhoSaw === totalOnlineMembers) {
+    return "seen";
+  }
+  
+  // If at least half of online members have seen it, mark as delivered
+  if (totalOnlineMembers > 0 && onlineMembersWhoSaw >= Math.ceil(totalOnlineMembers / 2)) {
+    return "delivered";
+  }
+  
+  // If any online member has seen it, mark as delivered
+  if (onlineMembersWhoSaw > 0) {
+    return "delivered";
+  }
+  
   return "sent";
 }
 
@@ -19,6 +43,8 @@ export default function GroupChatWindow() {
   const [input, setInput] = useState("");
   const [menuOpenMsgId, setMenuOpenMsgId] = useState("");
   const [groupUsers, setGroupUsers] = useState({});
+  const [isFileModalOpen, setIsFileModalOpen] = useState(false);
+  const [onlineMembers, setOnlineMembers] = useState([]);
 
 
   useEffect(() => {
@@ -38,10 +64,20 @@ export default function GroupChatWindow() {
       if (snap.exists()) {
         const allUsers = snap.val();
         const filtered = {};
+        const currentOnlineMembers = [];
+        
         group.members.forEach((uid) => {
-          if (allUsers[uid]) filtered[uid] = allUsers[uid];
+          if (allUsers[uid]) {
+            filtered[uid] = allUsers[uid];
+            // Check if member is online
+            if (allUsers[uid].status?.state === "online") {
+              currentOnlineMembers.push(uid);
+            }
+          }
         });
+        
         setGroupUsers(filtered);
+        setOnlineMembers(currentOnlineMembers);
       }
     });
     return () => unsub();
@@ -58,13 +94,20 @@ export default function GroupChatWindow() {
         const msgsArr = Object.values(msgsObj);
         setMessages(msgsArr);
 
-        Object.entries(msgsObj).forEach(([msgId, msg]) => {
-          if (!msg.seenBy?.includes(currentUid)) {
-            update(ref(database, `groups/${groupId}/messages/${msgId}`), {
-              seenBy: [...(msg.seenBy || []), currentUid],
+        // Only mark as seen if current user is online and hasn't seen the message yet
+        const currentUserRef = ref(database, `users/${currentUid}`);
+        onValue(currentUserRef, (userSnap) => {
+          const userData = userSnap.val();
+          if (userData?.status?.state === "online") {
+            Object.entries(msgsObj).forEach(([msgId, msg]) => {
+              if (!msg.seenBy?.includes(currentUid) && msg.sender !== currentUid) {
+                update(ref(database, `groups/${groupId}/messages/${msgId}`), {
+                  seenBy: [...(msg.seenBy || []), currentUid],
+                });
+              }
             });
           }
-        });
+        }, { onlyOnce: true });
       } else {
         setMessages([]);
       }
@@ -108,6 +151,7 @@ export default function GroupChatWindow() {
     const msgRef = ref(database, `groups/${groupId}/messages/${msgId}`);
     await update(msgRef, {
       text: "",
+      fileData: null,
       deletedForEveryone: true,
     });
     setMenuOpenMsgId("");
@@ -126,6 +170,26 @@ export default function GroupChatWindow() {
       seenBy: [currentUid],
     });
     setInput("");
+  };
+
+  const handleFileSend = async (fileData) => {
+    const currentUid = auth.currentUser?.uid;
+    const messagesRef = ref(database, `groups/${groupId}/messages`);
+    const newMsgRef = push(messagesRef);
+    await set(newMsgRef, {
+      id: newMsgRef.key,
+      sender: currentUid,
+      text: fileData.message || '',
+      time: Date.now(),
+      seenBy: [currentUid],
+      fileData: {
+        fileName: fileData.fileName,
+        fileSize: fileData.fileSize,
+        fileType: fileData.fileType,
+        fileContent: fileData.fileContent
+      },
+      messageType: 'file'
+    });
   };
 
   if (!group) {
@@ -190,15 +254,39 @@ export default function GroupChatWindow() {
                   }`}
               >
                 <div className="flex items-center justify-between">
-                  <p>
-                    {isDeletedForEveryone ? (
-                      <span className="italic text-gray-400">
-                        this message has been deleted
-                      </span>
-                    ) : (
-                      msg.text
-                    )}
-                  </p>
+                  {msg.messageType === 'file' ? (
+                    <div className="flex flex-col gap-2">
+                      {!isDeletedForEveryone ? (
+                        <FilePreview
+                          fileData={msg.fileData}
+                          isOwn={msg.sender === auth.currentUser?.uid}
+                        />
+                      ) : (
+                        <span className="italic text-gray-400">this file has been deleted</span>
+                      )}
+                      {msg.text && (
+                        <p className="mt-2">
+                          {isDeletedForEveryone ? (
+                            <span className="italic text-gray-400">
+                              this message has been deleted
+                            </span>
+                          ) : (
+                            msg.text
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p>
+                      {isDeletedForEveryone ? (
+                        <span className="italic text-gray-400">
+                          this message has been deleted
+                        </span>
+                      ) : (
+                        msg.text
+                      )}
+                    </p>
+                  )}
                   <button
                     className="ml-2 text-gray-400 hover:text-yellow-500"
                     onClick={() => setMenuOpenMsgId(msg.id)}
@@ -214,7 +302,7 @@ export default function GroupChatWindow() {
                     >
                       <button
                         onClick={() => handleDeleteForMe(msg.id)}
-                        className="text-white block px-4 py-2 text-left w-full hover:bg-gray-800"
+                        className="text-white block px-4 py-2 text-left w-full hover:bg-gray-800 text-nowrap"
                       >
                         Delete For Me
                       </button>
@@ -222,7 +310,7 @@ export default function GroupChatWindow() {
                         !isDeletedForEveryone && (
                           <button
                             onClick={() => handleDeleteForEveryone(msg.id)}
-                            className="block px-4 py-2 text-left w-full hover:bg-gray-800 text-red-400"
+                            className="text-nowrap block px-4 py-2 text-left w-full hover:bg-gray-800 text-red-400"
                           >
                             Delete For Everyone
                           </button>
@@ -241,11 +329,11 @@ export default function GroupChatWindow() {
                   </span>
                   {msg.sender === auth.currentUser?.uid && (
                     <span className="text-xs ml-2">
-                      {getMessageStatus(msg, group.members.length) === "sent" &&
+                      {getMessageStatus(msg, group.members.length, onlineMembers) === "sent" &&
                         "✓"}
-                      {getMessageStatus(msg, group.members.length) ===
+                      {getMessageStatus(msg, group.members.length, onlineMembers) ===
                         "delivered" && "✓✓"}
-                      {getMessageStatus(msg, group.members.length) === "seen" && (
+                      {getMessageStatus(msg, group.members.length, onlineMembers) === "seen" && (
                         <span className="text-blue-400">✓✓</span>
                       )}
                     </span>
@@ -259,11 +347,19 @@ export default function GroupChatWindow() {
 
       {/* Input */}
       <div className="p-3 border-t border-yellow-600 bg-black flex gap-2">
+        <button
+          onClick={() => setIsFileModalOpen(true)}
+          className="hover:text-yellow-50 p-2 hover:bg-gray-800 rounded-lg transition"
+          title="Share File"
+        >
+          <Plus size={24} />
+        </button>
         <input
           type="text"
           placeholder="Type a message..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && handleSend()}
           className="flex-1 rounded-xl px-4 py-2 bg-gray-900 text-white focus:outline-none border border-yellow-600"
         />
         <button
@@ -273,6 +369,13 @@ export default function GroupChatWindow() {
           Send
         </button>
       </div>
+
+      {/* File Upload Modal */}
+      <FileUploadModal
+        isOpen={isFileModalOpen}
+        onClose={() => setIsFileModalOpen(false)}
+        onSend={handleFileSend}
+      />
     </div>
   );
 }

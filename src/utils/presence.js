@@ -24,6 +24,13 @@ export const setupPresence = (userId, isOnline) => {
           state: "offline",
           last_changed: Date.now(),
         })
+      } else {
+        // User is disconnected - immediately set offline
+        const status = {
+          state: "offline",
+          last_changed: Date.now(),
+        }
+        set(userStatusRef, status)
       }
     })
   } else {

@@ -6,6 +6,7 @@ import { setupPresence } from "../../utils/presence";
 import { Settings, MoreVertical, Users } from "lucide-react";
 import Profile from "../../components/Profile";
 import CreateGroupModal from "../../components/CreateGroupModal";
+import { showMessageNotification, getCurrentActiveChat } from "../../utils/notifications";
 
 export default function Sidebar() {
   const [users, setUsers] = useState([]);
@@ -52,16 +53,24 @@ export default function Sidebar() {
           ? `${currentUid}_${user.uid}`
           : `${user.uid}_${currentUid}`;
       const messagesRef = ref(database, `chats/${chatKey}/messages`);
+      
+      let previousMessages = new Set();
+      
       const unsub = onValue(messagesRef, (snap) => {
         let lastMsgTime = 0;
         let unreadCount = 0;
         let lastSender = "";
+        let latestMessage = null;
+        
         if (snap.exists()) {
           const msgs = Object.values(snap.val());
+          const currentMessages = new Set(msgs.map(msg => msg.id));
+          
           msgs.forEach((msg) => {
             if (msg.time > lastMsgTime) {
               lastMsgTime = msg.time;
               lastSender = msg.sender;
+              latestMessage = msg;
             }
             if (
               msg.receiver === currentUid &&
@@ -70,7 +79,28 @@ export default function Sidebar() {
               unreadCount++;
             }
           });
+          
+          // Check for new messages and show notification
+          if (latestMessage && 
+              latestMessage.sender !== currentUid && 
+              latestMessage.receiver === currentUid &&
+              !previousMessages.has(latestMessage.id)) {
+            
+            const activeChat = getCurrentActiveChat();
+            const isCurrentChatActive = activeChat && 
+                                      activeChat.type === 'user' && 
+                                      activeChat.id === user.uid;
+            
+            if (!isCurrentChatActive) {
+              const senderName = user.fullName || user.email;
+              showMessageNotification(senderName, latestMessage.text, latestMessage.id, false);
+            }
+          }
+          
+          // Update the previous messages set
+          previousMessages = currentMessages;
         }
+        
         setChatMeta((prev) => ({
           ...prev,
           [user.uid]: { lastMsgTime, unreadCount, lastSender },
@@ -112,22 +142,51 @@ export default function Sidebar() {
 
     groups.forEach((group) => {
       const messagesRef = ref(database, `groups/${group.id}/messages`);
+      
+      let previousMessages = new Set();
+      
       const unsub = onValue(messagesRef, (snap) => {
         let lastMsgTime = 0;
         let unreadCount = 0;
         let lastSender = "";
+        let latestMessage = null;
+        
         if (snap.exists()) {
           const msgs = Object.values(snap.val());
+          const currentMessages = new Set(msgs.map(msg => msg.id));
+          
           msgs.forEach((msg) => {
             if (msg.time > lastMsgTime) {
               lastMsgTime = msg.time;
               lastSender = msg.sender;
+              latestMessage = msg;
             }
             if (msg.sender !== currentUid && (!msg.seenBy || !msg.seenBy.includes(currentUid))) {
               unreadCount++;
             }
           });
+          
+          // Check for new group messages and show notification
+          if (latestMessage && 
+              latestMessage.sender !== currentUid &&
+              !previousMessages.has(latestMessage.id)) {
+            
+            const activeChat = getCurrentActiveChat();
+            const isCurrentGroupActive = activeChat && 
+                                        activeChat.type === 'group' && 
+                                        activeChat.id === group.id;
+            
+            if (!isCurrentGroupActive) {
+              // Find sender name from group members
+              const senderName = `${group.name}`; // You could enhance this to show actual sender name
+              showMessageNotification(senderName, latestMessage.text, latestMessage.id, true);
+            }
+          }
+          
+          // Update the previous messages set
+          previousMessages = currentMessages;
         }
+        
         setGroupMeta((prev) => ({
           ...prev,
           [group.id]: { lastMsgTime, unreadCount, lastSender },
@@ -171,6 +230,9 @@ export default function Sidebar() {
     return bTime - aTime;
   });
 
+  // Calculate the number of chats with unread messages
+  const unreadChatsCount = sortedChats.filter(chat => chat.unreadCount > 0).length;
+
   const handleLogout = async () => {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
@@ -189,7 +251,14 @@ export default function Sidebar() {
   return (
     <div className="hidden md:flex flex-col w-1/3 border-r border-yellow-600 bg-black">
       <div className="flex items-center justify-between p-4 text-xl font-semibold text-yellow-400 border-b border-yellow-600 relative">
-        <span>Chats</span>
+        <div className="flex items-center gap-2">
+          <span>Chats</span>
+          {unreadChatsCount > 0 && (
+            <span className="inline-flex items-center justify-center w-6 h-6 text-sm font-bold bg-yellow-500 text-black rounded-full">
+              {unreadChatsCount}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsProfileOpen(true)}
