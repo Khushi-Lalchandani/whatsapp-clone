@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { auth, database } from "../../firebase/firebase";
 import { onValue, ref, push, set, update } from "firebase/database";
@@ -6,7 +6,6 @@ import { onAuthStateChanged } from "firebase/auth";
 import { encryptMessage, decryptMessage } from "../../utils/encryptUtils";
 import { Settings } from "lucide-react";
 import Profile from "../../components/Profile";
-
 
 function getLastSeenText(lastOnline) {
   if (!lastOnline) return "Offline";
@@ -17,23 +16,24 @@ function getLastSeenText(lastOnline) {
   if (diffSec < 60) return "Last seen just now";
   if (diffSec < 3600) return `Last seen ${Math.floor(diffSec / 60)} min ago`;
   if (diffSec < 86400)
-    return `Last seen ${Math.floor(diffSec / 3600)} hour${Math.floor(diffSec / 3600) > 1 ? "s" : ""
-      } ago`;
-  return `Last seen ${Math.floor(diffSec / 86400)} day${Math.floor(diffSec / 86400) > 1 ? "s" : ""
-    } ago`;
+    return `Last seen ${Math.floor(diffSec / 3600)} hour${Math.floor(diffSec / 3600) > 1 ? "s" : ""} ago`;
+  return `Last seen ${Math.floor(diffSec / 86400)} day${Math.floor(diffSec / 86400) > 1 ? "s" : ""} ago`;
 }
 
 export default function MainWindow() {
+  const menuRef = useRef();
   const { chatId } = useParams();
   const [messages, setMessages] = useState([]);
   const [recipient, setRecipient] = useState(null);
   const [input, setInput] = useState("");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [menuOpenMsgId, setMenuOpenMsgId] = useState(null);
 
   const generateChatId = (uid1, uid2) => {
     return uid1 < uid2 ? `${uid1}_${uid2}` : `${uid2}_${uid1}`;
   };
 
+  // Mark messages as delivered if recipient is online
   useEffect(() => {
     if (!chatId || !auth.currentUser) return;
     const userRef = ref(database, `users/${chatId}`);
@@ -43,7 +43,6 @@ export default function MainWindow() {
     const unsub = onValue(userRef, (snapshot) => {
       const userData = snapshot.val();
       if (userData?.status?.state === "online") {
-        // Recipient is online, mark all "sent" messages as "delivered"
         onValue(messagesRef, (msgSnap) => {
           if (msgSnap.exists()) {
             const msgs = msgSnap.val();
@@ -65,6 +64,7 @@ export default function MainWindow() {
     return () => unsub();
   }, [chatId, auth.currentUser]);
 
+  // Fetch messages and handle "seen" status
   useEffect(() => {
     let unsubscribe;
     const authUnsub = onAuthStateChanged(auth, (user) => {
@@ -74,10 +74,14 @@ export default function MainWindow() {
         unsubscribe = onValue(messagesRef, (snapshot) => {
           if (snapshot.exists()) {
             const msgs = Object.values(snapshot.val());
-            setMessages(msgs);
+            // Filter out messages deleted for me
+            const filteredMsgs = msgs.filter(
+              (msg) => !(msg.deletedForMe?.includes(user.uid))
+            );
+            setMessages(filteredMsgs);
 
             // Mark "delivered" → "seen" (if viewing this chat)
-            msgs.forEach((msg) => {
+            filteredMsgs.forEach((msg) => {
               if (
                 msg.receiver === user.uid &&
                 msg.status === "delivered"
@@ -99,6 +103,7 @@ export default function MainWindow() {
       if (unsubscribe) unsubscribe();
     };
   }, [chatId]);
+
   // Listen for recipient info
   useEffect(() => {
     if (!chatId) return;
@@ -110,6 +115,21 @@ export default function MainWindow() {
     });
     return () => unsub();
   }, [chatId]);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpenMsgId(null);
+      }
+    }
+    if (menuOpenMsgId) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [menuOpenMsgId]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -131,6 +151,38 @@ export default function MainWindow() {
 
     await set(newMessageRef, messageObj);
     setInput("");
+  };
+
+  // Delete for me: add current user to deletedForMe array
+  const handleDeleteForMe = async (msgId) => {
+    const currentUserId = auth.currentUser?.uid;
+    const chatKey = generateChatId(currentUserId, chatId);
+    const msgRef = ref(database, `chats/${chatKey}/messages/${msgId}`);
+    let prevDeletedForMe = [];
+    const msgSnap = await new Promise((resolve) => {
+      onValue(msgRef, (snap) => resolve(snap), { onlyOnce: true });
+    });
+    if (msgSnap.exists()) {
+      prevDeletedForMe = msgSnap.val().deletedForMe || [];
+    }
+    console.log(prevDeletedForMe);
+    await update(msgRef, {
+      deletedForMe: [...prevDeletedForMe, currentUserId],
+
+    });
+    setMenuOpenMsgId(null);
+  };
+
+  // Delete for everyone: set deletedForEveryone and clear text
+  const handleDeleteForEveryone = async (msgId) => {
+    const currentUserId = auth.currentUser?.uid;
+    const chatKey = generateChatId(currentUserId, chatId);
+    const msgRef = ref(database, `chats/${chatKey}/messages/${msgId}`);
+    await update(msgRef, {
+      text: "",
+      deletedForEveryone: true,
+    });
+    setMenuOpenMsgId(null);
   };
 
   if (!chatId) {
@@ -208,43 +260,84 @@ export default function MainWindow() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-4 bg-gradient-to-br from-black to-gray-900">
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex ${msg.sender === auth.currentUser?.uid
-              ? "justify-end"
-              : "justify-start"
-              }`}
-          >
+        {messages.map((msg) => {
+          // Only render messages NOT deleted for me
+          if (msg.deletedForMe?.includes(auth.currentUser?.uid)) return null;
+
+          const isDeletedForEveryone = msg.deletedForEveryone;
+          return (
             <div
-              className={`rounded-2xl px-4 py-2 max-w-xs shadow-md ${msg.sender === auth.currentUser?.uid
-                ? "bg-yellow-500 text-black"
-                : "bg-gray-800 text-white border border-yellow-600"
+              key={msg.id}
+              className={`flex ${msg.sender === auth.currentUser?.uid
+                ? "justify-end"
+                : "justify-start"
                 }`}
             >
-              <p>{decryptMessage(msg.text)}</p>
-              <div className="flex justify-between items-center mt-1">
-                <span className="text-xs text-gray-300">
-                  {msg.time
-                    ? new Date(msg.time).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })
-                    : "sending..."}
-                </span>
-                {msg.sender === auth.currentUser?.uid && (
-                  <span className="text-xs ml-2">
-                    {msg.status === "sent" && "✓"}
-                    {msg.status === "delivered" && "✓✓"}
-                    {msg.status === "seen" && (
-                      <span className="text-blue-400">✓✓</span>
-                    )}
+              <div
+                className={`relative rounded-2xl px-4 py-2 max-w-xs shadow-md ${msg.sender === auth.currentUser?.uid
+                  ? "bg-yellow-500 text-black"
+                  : "bg-gray-800 text-white border border-yellow-600"
+                  }`}
+              >
+                <div className="flex items-center justify-between">
+                  <p>
+                    {isDeletedForEveryone
+                      ? <span className="italic text-gray-400">this message has been deleted</span>
+                      : decryptMessage(msg.text)}
+                  </p>
+                  {/* Three dots menu */}
+                  <button
+                    className="ml-2 text-gray-400 hover:text-yellow-500"
+                    onClick={() => setMenuOpenMsgId(msg.id)}
+                    title="More"
+                  >
+                    &#x22EE;
+                  </button>
+                  {menuOpenMsgId === msg.id && (
+                    <div
+                      ref={menuRef}
+                      className="absolute right-0 top-8 bg-black border border-yellow-600 rounded shadow-lg z-10"
+                    >
+                      <button
+                        className="block px-4 py-2 text-left w-full hover:bg-gray-800 text-white"
+                        onClick={() => handleDeleteForMe(msg.id)}
+                      >
+                        Delete for me
+                      </button>
+                      {msg.sender === auth.currentUser?.uid && !isDeletedForEveryone && (
+                        <button
+                          className="block px-4 py-2 text-left w-full hover:bg-gray-800 text-red-400"
+                          onClick={() => handleDeleteForEveryone(msg.id)}
+                        >
+                          Delete for everyone
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-between items-center mt-1">
+                  <span className="text-xs text-gray-300">
+                    {msg.time
+                      ? new Date(msg.time).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                      : "sending..."}
                   </span>
-                )}
+                  {msg.sender === auth.currentUser?.uid && (
+                    <span className="text-xs ml-2">
+                      {msg.status === "sent" && "✓"}
+                      {msg.status === "delivered" && "✓✓"}
+                      {msg.status === "seen" && (
+                        <span className="text-blue-400">✓✓</span>
+                      )}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Input */}
