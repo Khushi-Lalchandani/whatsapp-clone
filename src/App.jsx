@@ -17,13 +17,11 @@ function App() {
       console.log(user);
       setIsAuthenticated(!!user);
 
-      // Set up presence for authenticated users
       if (user) {
         setupPresence(user.uid, true);
       }
     });
 
-    // Handle page unload/refresh to set user offline
     const handleBeforeUnload = () => {
       const currentUser = auth.currentUser;
       if (currentUser) {
@@ -31,6 +29,8 @@ function App() {
       }
     };
 
+
+    //problem is protecting routes. might need upgrading of version.
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {

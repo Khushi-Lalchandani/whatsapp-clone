@@ -20,7 +20,7 @@ export default function GroupChatWindow() {
   const [menuOpenMsgId, setMenuOpenMsgId] = useState("");
   const [groupUsers, setGroupUsers] = useState({});
 
-  // Fetch group info
+
   useEffect(() => {
     if (!groupId) return;
     const groupRef = ref(database, `groups/${groupId}`);
@@ -30,7 +30,7 @@ export default function GroupChatWindow() {
     return () => unsub();
   }, [groupId]);
 
-  // Fetch group users info
+
   useEffect(() => {
     if (!group || !group.members) return;
     const usersRef = ref(database, "users");
@@ -47,7 +47,7 @@ export default function GroupChatWindow() {
     return () => unsub();
   }, [group]);
 
-  // Fetch messages and mark as seen
+
   useEffect(() => {
     if (!groupId || !auth.currentUser) return;
     const currentUid = auth.currentUser.uid;
@@ -71,7 +71,7 @@ export default function GroupChatWindow() {
     });
     return () => unsub();
   }, [groupId, auth.currentUser]);
-  // Close menu when clicking outside
+
   useEffect(() => {
     function handleClickOutside(e) {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
@@ -86,7 +86,7 @@ export default function GroupChatWindow() {
     };
   }, [menuOpenMsgId]);
 
-  // Delete for me
+
   const handleDeleteForMe = async (msgId) => {
     const currentUid = auth.currentUser?.uid;
     const msgRef = ref(database, `groups/${groupId}/messages/${msgId}`);
@@ -103,7 +103,7 @@ export default function GroupChatWindow() {
     setMenuOpenMsgId("");
   };
 
-  // Delete for everyone
+
   const handleDeleteForEveryone = async (msgId) => {
     const msgRef = ref(database, `groups/${groupId}/messages/${msgId}`);
     await update(msgRef, {

@@ -1,3 +1,8 @@
+//debugging problem: Auth.currentUser becomes null on relading. need to set that later.
+// auth guard is remaining
+//ui needs changes
+
+
 import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { auth, database } from "../../firebase/firebase";
@@ -33,7 +38,8 @@ export default function MainWindow() {
     return uid1 < uid2 ? `${uid1}_${uid2}` : `${uid2}_${uid1}`;
   };
 
-  // Mark messages as delivered if recipient is online
+  //notes: first when there is need to change the data in realtime, start with taking reference of the database where you need to make changes. then start with checking whether the database is available, then take it's snapshot to set, get, or update the values.
+
   useEffect(() => {
     if (!chatId || !auth.currentUser) return;
     const userRef = ref(database, `users/${chatId}`);
@@ -64,7 +70,7 @@ export default function MainWindow() {
     return () => unsub();
   }, [chatId, auth.currentUser]);
 
-  // Fetch messages and handle "seen" status
+
   useEffect(() => {
     let unsubscribe;
     const authUnsub = onAuthStateChanged(auth, (user) => {
@@ -74,13 +80,13 @@ export default function MainWindow() {
         unsubscribe = onValue(messagesRef, (snapshot) => {
           if (snapshot.exists()) {
             const msgs = Object.values(snapshot.val());
-            // Filter out messages deleted for me
+
             const filteredMsgs = msgs.filter(
               (msg) => !(msg.deletedForMe?.includes(user.uid))
             );
             setMessages(filteredMsgs);
 
-            // Mark "delivered" → "seen" (if viewing this chat)
+
             filteredMsgs.forEach((msg) => {
               if (
                 msg.receiver === user.uid &&
@@ -104,7 +110,7 @@ export default function MainWindow() {
     };
   }, [chatId]);
 
-  // Listen for recipient info
+
   useEffect(() => {
     if (!chatId) return;
     const userRef = ref(database, `users/${chatId}`);
@@ -116,7 +122,7 @@ export default function MainWindow() {
     return () => unsub();
   }, [chatId]);
 
-  // Close menu when clicking outside
+
   useEffect(() => {
     function handleClickOutside(e) {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
@@ -153,7 +159,7 @@ export default function MainWindow() {
     setInput("");
   };
 
-  // Delete for me: add current user to deletedForMe array
+
   const handleDeleteForMe = async (msgId) => {
     const currentUserId = auth.currentUser?.uid;
     const chatKey = generateChatId(currentUserId, chatId);
@@ -173,7 +179,6 @@ export default function MainWindow() {
     setMenuOpenMsgId(null);
   };
 
-  // Delete for everyone: set deletedForEveryone and clear text
   const handleDeleteForEveryone = async (msgId) => {
     const currentUserId = auth.currentUser?.uid;
     const chatKey = generateChatId(currentUserId, chatId);
@@ -228,7 +233,7 @@ export default function MainWindow() {
       {recipient && (
         <div className="flex items-center gap-3 p-3 border-b border-yellow-600 bg-black">
           <img
-            src={recipient.profileImage || "https://via.placeholder.com/40"}
+            src={recipient.profileImage || "https:
             alt="profile"
             className="w-10 h-10 rounded-full border border-yellow-500"
           />
@@ -261,7 +266,7 @@ export default function MainWindow() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-4 bg-gradient-to-br from-black to-gray-900">
         {messages.map((msg) => {
-          // Only render messages NOT deleted for me
+
           if (msg.deletedForMe?.includes(auth.currentUser?.uid)) return null;
 
           const isDeletedForEveryone = msg.deletedForEveryone;
@@ -279,7 +284,7 @@ export default function MainWindow() {
                   : "bg-gray-800 text-white border border-yellow-600"
                   }`}
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-start justify-between">
                   <p>
                     {isDeletedForEveryone
                       ? <span className="italic text-gray-400">this message has been deleted</span>
