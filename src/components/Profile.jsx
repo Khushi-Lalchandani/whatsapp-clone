@@ -49,7 +49,7 @@ const Profile = ({ isOpen, onClose }) => {
           profileImage: userData.profileImage || "",
         });
         setTempProfile({
-          // Only allow profileImage to be changed
+          // 
           profileImage: userData.profileImage || "",
         });
       }
@@ -72,21 +72,21 @@ const Profile = ({ isOpen, onClose }) => {
     }
   };
 
-  // const handleSave = async () => {
-  //   if (!auth.currentUser) return;
 
-  //   try {
-  //     const userRef = ref(database, `users/${auth.currentUser.uid}`);
-  //     await update(userRef, {
-  //       fullName: tempProfile.fullName,
-  //       profileImage: tempProfile.profileImage,
-  //     });
-  //     setIsEditing(false);
-  //   } catch (error) {
-  //     console.error("Error updating profile:", error);
-  //     alert("Failed to update profile. Please try again.");
-  //   }
-  // };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
   const handleSave = async () => {
@@ -95,7 +95,7 @@ const Profile = ({ isOpen, onClose }) => {
     try {
       const userRef = ref(database, `users/${auth.currentUser.uid}`);
       await update(userRef, {
-        // Only update profileImage
+
         profileImage: tempProfile.profileImage,
       });
       setIsEditing(false);

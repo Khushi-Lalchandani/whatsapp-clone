@@ -17,7 +17,7 @@ export default function Sidebar() {
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const navigate = useNavigate();
 
-  // Fetch users
+
   useEffect(() => {
     const usersRef = ref(database, "users");
     const unsubscribe = onValue(usersRef, (snapshot) => {
@@ -39,7 +39,7 @@ export default function Sidebar() {
     return () => unsubscribe();
   }, []);
 
-  // Fetch chat meta (last message time & unread count) for users
+
   useEffect(() => {
     const currentUid = auth.currentUser?.uid;
     if (!currentUid || users.length === 0) return;
@@ -84,7 +84,7 @@ export default function Sidebar() {
     };
   }, [users, auth.currentUser]);
 
-  // Fetch groups where current user is a member
+
   useEffect(() => {
     const currentUid = auth.currentUser?.uid;
     if (!currentUid) return;
@@ -103,7 +103,7 @@ export default function Sidebar() {
     return () => unsub();
   }, [auth.currentUser]);
 
-  // Fetch group meta (last message time & unread count) for groups
+
   useEffect(() => {
     const currentUid = auth.currentUser?.uid;
     if (!currentUid || groups.length === 0) return;
@@ -123,7 +123,7 @@ export default function Sidebar() {
               lastMsgTime = msg.time;
               lastSender = msg.sender;
             }
-            // Unread for group: if current user hasn't seen this message
+
             if (msg.sender !== currentUid && (!msg.seenBy || !msg.seenBy.includes(currentUid))) {
               unreadCount++;
             }
@@ -142,13 +142,13 @@ export default function Sidebar() {
     };
   }, [groups, auth.currentUser]);
 
-  // Combine users and groups for unified sorting
+
   const chatList = [
     ...users.map((user) => ({
       type: "user",
       id: user.uid,
       name: user.fullName || user.email,
-      avatar: user.profileImage || "https://via.placeholder.com/40/FFD700/000000?text=U",
+      avatar: user.profileImage || "https:
       lastMsgTime: chatMeta[user.uid]?.lastMsgTime || 0,
       unreadCount: chatMeta[user.uid]?.unreadCount || 0,
       members: [],
@@ -167,7 +167,7 @@ export default function Sidebar() {
     })),
   ];
 
-  // Sort by lastMsgTime descending
+
   const sortedChats = chatList.sort((a, b) => {
     const aTime = a.lastMsgTime || a.createdAt || 0;
     const bTime = b.lastMsgTime || b.createdAt || 0;
