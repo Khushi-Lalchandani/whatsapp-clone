@@ -4,16 +4,17 @@
 
 
 import React, { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { auth, database } from "../../firebase/firebase";
 import { onValue, ref, push, set, update } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import { encryptMessage, decryptMessage } from "../../utils/encryptUtils";
-import { Settings, Plus } from "lucide-react";
+import { Settings, Plus, MoreVertical, LogOut, ArrowLeft } from "lucide-react";
 import Profile from "../../components/Profile";
 import UserPreview from "./UserPreview";
 import FileUploadModal from "../../components/FileUploadModal";
 import FilePreview from "../../components/FilePreview";
+import { setupPresence } from "../../utils/presence";
 
 function getLastSeenText(lastOnline) {
   if (!lastOnline) return "Offline";
@@ -39,11 +40,24 @@ export default function MainWindow() {
   const [showPreview, setShowPreview] = useState(false);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [statusCheckInterval, setStatusCheckInterval] = useState(null);
-
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const navigate = useNavigate();
   const generateChatId = (uid1, uid2) => {
     return uid1 < uid2 ? `${uid1}_${uid2}` : `${uid2}_${uid1}`;
   };
 
+  const handleLogout = async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    await setupPresence(uid, false);
+    await auth.signOut();
+    localStorage.removeItem("user");
+    navigate("/");
+  };
+  const handleBack = async () => {
+    navigate(-1);
+  };
   //notes: first when there is need to change the data in realtime, start with taking reference of the database where you need to make changes. then start with checking whether the database is available, then take it's snapshot to set, get, or update the values.
 
   // Update message status to 'delivered' when recipient is online
@@ -57,31 +71,31 @@ export default function MainWindow() {
 
     const userStatusUnsub = onValue(userRef, (snapshot) => {
       const userData = snapshot.val();
-      
+
       // Check if user exists and has a valid status
       const isRecipientOnline = userData?.status?.state === "online";
-      
+
       // Additional check: if no status exists, treat as offline
       // This handles cases where user is completely disconnected
       const hasValidStatus = userData?.status && userData?.status?.state;
-      
-      // Check if status is too old (user might be disconnected but status not updated)
+
+
       const statusAge = userData?.status?.last_changed ? Date.now() - userData?.status?.last_changed : Infinity;
-      const isStatusFresh = statusAge < 30000; // Consider status stale after 30 seconds
-      
+      const isStatusFresh = statusAge < 30000;
+
       const finalOnlineStatus = hasValidStatus && isRecipientOnline && isStatusFresh;
-      
+
       // Clean up previous messages listener
       if (messagesUnsubscribe) {
         messagesUnsubscribe();
       }
-      
+
       // Set up new messages listener
       messagesUnsubscribe = onValue(messagesRef, (msgSnap) => {
         if (msgSnap.exists()) {
           const msgs = msgSnap.val();
           const updates = {};
-          
+
           Object.entries(msgs).forEach(([msgId, msg]) => {
             if (
               msg.receiver === chatId &&
@@ -97,7 +111,7 @@ export default function MainWindow() {
               }
             }
           });
-          
+
           // Batch update all status changes
           if (Object.keys(updates).length > 0) {
             update(messagesRef, updates);
@@ -117,29 +131,29 @@ export default function MainWindow() {
   // Add a periodic check to ensure message statuses are correct
   useEffect(() => {
     if (!chatId || !auth.currentUser) return;
-    
+
     const checkMessageStatuses = async () => {
       const userRef = ref(database, `users/${chatId}`);
       const chatKey = generateChatId(auth.currentUser.uid, chatId);
       const messagesRef = ref(database, `chats/${chatKey}/messages`);
-      
+
       try {
         const userSnap = await new Promise(resolve => {
           onValue(userRef, snap => resolve(snap), { onlyOnce: true });
         });
-        
+
         const msgSnap = await new Promise(resolve => {
           onValue(messagesRef, snap => resolve(snap), { onlyOnce: true });
         });
-        
+
         const userData = userSnap.val();
         const statusAge = userData?.status?.last_changed ? Date.now() - userData?.status?.last_changed : Infinity;
         const isOnline = userData?.status?.state === "online" && statusAge < 30000;
-        
+
         if (msgSnap.exists()) {
           const msgs = msgSnap.val();
           const updates = {};
-          
+
           Object.entries(msgs).forEach(([msgId, msg]) => {
             if (msg.receiver === chatId && msg.sender === auth.currentUser.uid) {
               // Force offline messages back to sent if user is clearly offline
@@ -148,7 +162,7 @@ export default function MainWindow() {
               }
             }
           });
-          
+
           if (Object.keys(updates).length > 0) {
             await update(messagesRef, updates);
           }
@@ -157,12 +171,12 @@ export default function MainWindow() {
         console.error('Error in periodic status check:', error);
       }
     };
-    
+
     // Check immediately and then every 10 seconds
     checkMessageStatuses();
     const interval = setInterval(checkMessageStatuses, 10000);
     setStatusCheckInterval(interval);
-    
+
     return () => {
       if (interval) {
         clearInterval(interval);
@@ -362,15 +376,15 @@ export default function MainWindow() {
     <div className="flex flex-col h-full">
       {/* Chat Header */}
       {recipient && (
-        <div className="flex items-center gap-3 p-3 border-b border-yellow-600 bg-black" onClick={() => setShowPreview(true)
-        }>
+        <div className="flex items-center gap-3 p-3 border-b border-yellow-600 bg-black" >
           <img
             src={recipient.profileImage || "https:"}
             alt="profile"
             className="w-10 h-10 rounded-full border border-yellow-500"
           />
-          <div className="flex flex-col flex-1">
-            <h2 className="text-lg font-semibold text-white" >
+          <div className="flex flex-col flex-1" >
+            <h2 className="text-lg font-semibold text-white" onClick={() => setShowPreview(true)
+            } >
               {recipient.fullName || recipient.email}
             </h2>
             <span
@@ -392,6 +406,32 @@ export default function MainWindow() {
           >
             <Settings size={20} />
           </button>
+          <button
+            onClick={() => setDropdownOpen(prev => !prev)}
+            className="md:hidden p-2 rounded-lg hover:bg-gray-800 transition text-yellow-400"
+            title="Profile Settings"
+          >
+            <MoreVertical size={20} />
+          </button>
+
+          {dropdownOpen && (
+            <div className="absolute right-4 top-14 z-10 bg-black border border-yellow-600 rounded-lg shadow-lg min-w-[160px]">
+              <button
+                onClick={handleBack}
+                className="w-full flex items-center gap-2 px-4 py-2 text-yellow-400 hover:bg-gray-800 transition rounded-b-lg"
+              >
+                <ArrowLeft size={16} />
+                Back
+              </button>
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 px-4 py-2 text-yellow-400 hover:bg-gray-800 transition rounded-b-lg"
+              >
+                <LogOut size={16} />
+                Logout
+              </button>
+            </div>
+          )}
           {showPreview && recipient && (
             <UserPreview
               isOpen={showPreview}

@@ -1,37 +1,33 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { database, auth } from "../../firebase/firebase";
 import { ref, onValue, push, set, update } from "firebase/database";
-import { Plus } from "lucide-react";
+import { Plus, Settings, MoreVertical, LogOut, ArrowLeft } from "lucide-react";
 import FileUploadModal from "../../components/FileUploadModal";
 import FilePreview from "../../components/FilePreview";
+import Profile from "../../components/Profile";
+import { setupPresence } from "../../utils/presence";
 
 function getMessageStatus(msg, totalMembers, onlineMembers = []) {
   if (!msg.seenBy) return "sent";
   const seenCount = msg.seenBy.length;
-  
-  // Count how many online members (excluding sender) have seen the message
-  const onlineMembersWhoSaw = msg.seenBy.filter(uid => 
+  const onlineMembersWhoSaw = msg.seenBy.filter(uid =>
     uid !== msg.sender && onlineMembers.includes(uid)
   ).length;
-  
   const totalOnlineMembers = onlineMembers.filter(uid => uid !== msg.sender).length;
-  
-  // If all online members have seen it, mark as seen
+
   if (totalOnlineMembers > 0 && onlineMembersWhoSaw === totalOnlineMembers) {
     return "seen";
   }
-  
-  // If at least half of online members have seen it, mark as delivered
+
   if (totalOnlineMembers > 0 && onlineMembersWhoSaw >= Math.ceil(totalOnlineMembers / 2)) {
     return "delivered";
   }
-  
-  // If any online member has seen it, mark as delivered
+
   if (onlineMembersWhoSaw > 0) {
     return "delivered";
   }
-  
+
   return "sent";
 }
 
@@ -45,7 +41,23 @@ export default function GroupChatWindow() {
   const [groupUsers, setGroupUsers] = useState({});
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [onlineMembers, setOnlineMembers] = useState([]);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const navigate = useNavigate();
 
+  const handleLogout = async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    await setupPresence(uid, false);
+    await auth.signOut();
+    localStorage.removeItem("user");
+    navigate("/");
+  };
+
+  const handleBack = () => {
+    navigate(-1);
+  };
 
   useEffect(() => {
     if (!groupId) return;
@@ -56,7 +68,6 @@ export default function GroupChatWindow() {
     return () => unsub();
   }, [groupId]);
 
-
   useEffect(() => {
     if (!group || !group.members) return;
     const usersRef = ref(database, "users");
@@ -65,24 +76,20 @@ export default function GroupChatWindow() {
         const allUsers = snap.val();
         const filtered = {};
         const currentOnlineMembers = [];
-        
         group.members.forEach((uid) => {
           if (allUsers[uid]) {
             filtered[uid] = allUsers[uid];
-            // Check if member is online
             if (allUsers[uid].status?.state === "online") {
               currentOnlineMembers.push(uid);
             }
           }
         });
-        
         setGroupUsers(filtered);
         setOnlineMembers(currentOnlineMembers);
       }
     });
     return () => unsub();
   }, [group]);
-
 
   useEffect(() => {
     if (!groupId || !auth.currentUser) return;
@@ -94,7 +101,6 @@ export default function GroupChatWindow() {
         const msgsArr = Object.values(msgsObj);
         setMessages(msgsArr);
 
-        // Only mark as seen if current user is online and hasn't seen the message yet
         const currentUserRef = ref(database, `users/${currentUid}`);
         onValue(currentUserRef, (userSnap) => {
           const userData = userSnap.val();
@@ -129,7 +135,6 @@ export default function GroupChatWindow() {
     };
   }, [menuOpenMsgId]);
 
-
   const handleDeleteForMe = async (msgId) => {
     const currentUid = auth.currentUser?.uid;
     const msgRef = ref(database, `groups/${groupId}/messages/${msgId}`);
@@ -145,7 +150,6 @@ export default function GroupChatWindow() {
     });
     setMenuOpenMsgId("");
   };
-
 
   const handleDeleteForEveryone = async (msgId) => {
     const msgRef = ref(database, `groups/${groupId}/messages/${msgId}`);
@@ -202,8 +206,9 @@ export default function GroupChatWindow() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Group Header */}
+      {/* Group Chat Header */}
       <div className="flex items-center gap-3 p-3 border-b border-yellow-600 bg-black">
+
         <div className="w-10 h-10 rounded-full bg-yellow-500 flex items-center justify-center font-bold text-black text-xl border border-yellow-500">
           {group.groupImage ? (
             <img
@@ -215,6 +220,7 @@ export default function GroupChatWindow() {
             group.name[0] || "G"
           )}
         </div>
+
         <div className="flex flex-col flex-1">
           <h2 className="text-lg font-semibold text-yellow-400">
             {group.name}
@@ -223,13 +229,42 @@ export default function GroupChatWindow() {
             {group.members.length} members
           </span>
         </div>
+
+        {/* Settings and More options, visible only on mobile */}
+        <div className="relative md:hidden">
+          <button
+            onClick={() => setDropdownOpen(prev => !prev)}
+            className="p-2 rounded-lg hover:bg-gray-800 transition text-yellow-400"
+            title="More options"
+          >
+            <MoreVertical size={20} />
+          </button>
+
+          {dropdownOpen && (
+            <div className="absolute right-0 top-10 z-10 bg-black border border-yellow-600 rounded-lg shadow-lg min-w-[160px]">
+              <button
+                onClick={() => handleBack()}
+                className="w-full flex items-center gap-2 px-4 py-2 text-yellow-400 hover:bg-gray-800 transition rounded-t-lg"
+              >
+                <ArrowLeft size={16} />
+                Back
+              </button>
+              <button
+                onClick={() => { handleLogout(); setDropdownOpen(false); }}
+                className="w-full flex items-center gap-2 px-4 py-2 text-yellow-400 hover:bg-gray-800 transition rounded-b-lg"
+              >
+                <LogOut size={16} />
+                Logout
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-4 bg-gradient-to-br from-black to-gray-900">
         {messages.map((msg) => {
           if (msg.deleteForMe?.includes(auth.currentUser?.uid)) return null;
-
           const isDeletedForEveryone = msg.deletedForEveryone;
 
           return (
@@ -343,7 +378,7 @@ export default function GroupChatWindow() {
             </div>
           );
         })}
-      </div>
+      </div>;
 
       {/* Input */}
       <div className="p-3 border-t border-yellow-600 bg-black flex gap-2">
@@ -368,14 +403,19 @@ export default function GroupChatWindow() {
         >
           Send
         </button>
-      </div>
+      </div>;
 
       {/* File Upload Modal */}
       <FileUploadModal
         isOpen={isFileModalOpen}
         onClose={() => setIsFileModalOpen(false)}
         onSend={handleFileSend}
+      />;
+      {/* Profile Modal */}
+      <Profile
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
       />
-    </div>
+    </div >
   );
 }

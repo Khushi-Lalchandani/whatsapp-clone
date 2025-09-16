@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "./Sidebar";
 import MainWindow from "./MainWindow";
 import GroupChatWindow from "./GroupChatWindow";
@@ -8,7 +8,21 @@ const ChatWindow = () => {
   const { chatId, groupId } = useParams();
   const location = useLocation();
 
-  let MainComponent = <MainWindow />;
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
+  let MainComponent = null;
   if (location.pathname.startsWith("/chat/group/") && groupId) {
     MainComponent = <GroupChatWindow />;
   } else if (chatId) {
@@ -17,10 +31,25 @@ const ChatWindow = () => {
 
   return (
     <div className="flex h-screen bg-black text-white">
-      <Sidebar />
-      <div className="flex-1 flex flex-col">
-        {MainComponent}
-      </div>
+      {!isMobile && (
+        <>
+          <Sidebar />
+          <div className="flex-1 flex flex-col">
+            {MainComponent}
+          </div>
+        </>
+      )}
+
+      {isMobile && (
+        <>
+          {(!chatId && !groupId) && <Sidebar isMobile={isMobile} />}
+          {(chatId || groupId) && (
+            <div className="flex-1 flex flex-col">
+              {MainComponent}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };
