@@ -1,9 +1,7 @@
-// const firebase_key='AIzaSyDTwymf17u3DX7ZEtnNDSrQQyEI9NKlviM'
-
 import { initializeApp } from "firebase/app"
 import { getAuth } from "firebase/auth"
-
 import { getDatabase } from "firebase/database"
+import { getMessaging, getToken } from "firebase/messaging"
 
 const firebaseConfig = {
   apiKey: "AIzaSyDTwymf17u3DX7ZEtnNDSrQQyEI9NKlviM",
@@ -19,3 +17,30 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const database = getDatabase(app)
+export const messaging = getMessaging(app)
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker
+    .register("/firebase-messaging-sw.js")
+    .then((registration) => {
+      console.log("Service Worker registered with scope:", registration.scope)
+    })
+    .catch((err) => {
+      console.error("Service Worker registration failed:", err)
+    })
+}
+
+export const generateToken = async () => {
+  const permission = await Notification.requestPermission()
+  if (permission === "granted") {
+    const token = await getToken(messaging, {
+      vapidKey:
+        "BIK82ZYONmb7_1dzl3mFhz1P0uENN3ZQqcfT5bKdEqOgEkOOb3NHgpy8VU_v5WghoM_eA8U4UJMi0O60g5XG0DM",
+    })
+
+    console.log("FCM Token:", token)
+    return token
+  } else {
+    console.warn("Notification permission was not granted.")
+  }
+}

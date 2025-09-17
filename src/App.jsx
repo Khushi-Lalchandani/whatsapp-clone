@@ -14,6 +14,7 @@ import 'react-toastify/dist/ReactToastify.css';
 
 function App() {
 
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       console.log(user);
@@ -40,6 +41,9 @@ function App() {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, []);
+
+
+
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   return (
     <BrowserRouter>

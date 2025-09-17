@@ -3,6 +3,8 @@ import Sidebar from "./Sidebar";
 import MainWindow from "./MainWindow";
 import GroupChatWindow from "./GroupChatWindow";
 import { useParams, useLocation } from "react-router-dom";
+import { generateToken, messaging } from "../../firebase/firebase";
+import { onMessage } from "firebase/messaging";
 
 const ChatWindow = () => {
   const { chatId, groupId } = useParams();
@@ -10,6 +12,11 @@ const ChatWindow = () => {
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
+
+  useEffect(() => {
+    generateToken();
+    onMessage(messaging, (payload) => { console.log(payload); });
+  }, []);
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
