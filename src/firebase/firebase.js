@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app"
 import { getAuth } from "firebase/auth"
 import { getDatabase } from "firebase/database"
-import { getMessaging, getToken } from "firebase/messaging"
+import { getMessaging, getToken, onMessage } from "firebase/messaging"
 
 const firebaseConfig = {
   apiKey: "AIzaSyDTwymf17u3DX7ZEtnNDSrQQyEI9NKlviM",
@@ -19,6 +19,7 @@ export const auth = getAuth(app)
 export const database = getDatabase(app)
 export const messaging = getMessaging(app)
 
+// Register service worker
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker
     .register("/firebase-messaging-sw.js")
@@ -33,14 +34,26 @@ if ("serviceWorker" in navigator) {
 export const generateToken = async () => {
   const permission = await Notification.requestPermission()
   if (permission === "granted") {
-    const token = await getToken(messaging, {
-      vapidKey:
-        "BIK82ZYONmb7_1dzl3mFhz1P0uENN3ZQqcfT5bKdEqOgEkOOb3NHgpy8VU_v5WghoM_eA8U4UJMi0O60g5XG0DM",
-    })
-
-    console.log("FCM Token:", token)
-    return token
+    try {
+      const token = await getToken(messaging, {
+        vapidKey:
+          "BIK82ZYONmb7_1dzl3mFhz1P0uENN3ZQqcfT5bKdEqOgEkOOb3NHgpy8VU_v5WghoM_eA8U4UJMi0O60g5XG0DM",
+      })
+      console.log("FCM Token:", token)
+      return token
+    } catch (err) {
+      console.error("Error getting FCM token:", err)
+    }
   } else {
     console.warn("Notification permission was not granted.")
   }
 }
+
+// Foreground messages (when app is open)
+export const onMessageListener = () =>
+  new Promise((resolve) => {
+    onMessage(messaging, (payload) => {
+      console.log("Foreground message:", payload)
+      resolve(payload)
+    })
+  })

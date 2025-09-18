@@ -1,7 +1,6 @@
-// Give the service worker access to Firebase Messaging.
-// Note that you can only use Firebase Messaging here. Other Firebase libraries
-// are not available in the service worker.
-// Replace 10.13.2 with latest version of the Firebase JS SDK.
+// firebase-messaging-sw.js
+
+// Import Firebase scripts (compat versions for service workers)
 importScripts(
   "https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"
 )
@@ -9,34 +8,32 @@ importScripts(
   "https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js"
 )
 
-// Initialize the Firebase app in the service worker by passing in
-// your app's Firebase config object.
-// https://firebase.google.com/docs/web/setup#config-object
+// Initialize Firebase in the service worker
 firebase.initializeApp({
-  apiKey: "api-key",
-  authDomain: "project-id.firebaseapp.com",
-  databaseURL: "https://project-id.firebaseio.com",
-  projectId: "project-id",
-  storageBucket: "project-id.appspot.com",
-  messagingSenderId: "sender-id",
-  appId: "app-id",
-  measurementId: "G-measurement-id",
+  apiKey: "AIzaSyDTwymf17u3DX7ZEtnNDSrQQyEI9NKlviM",
+  authDomain: "chat-clone-476fc.firebaseapp.com",
+  databaseURL: "https://chat-clone-476fc-default-rtdb.firebaseio.com",
+  projectId: "chat-clone-476fc",
+  storageBucket: "chat-clone-476fc.firebasestorage.app",
+  messagingSenderId: "868830980940",
+  appId: "1:868830980940:web:2d13480e9d09913277fde9",
+  measurementId: "G-PTRKQT486Y",
 })
 
-// Retrieve an instance of Firebase Messaging so that it can handle background
-// messages.
+// Get messaging instance
 const messaging = firebase.messaging()
+
+// Handle background messages
 messaging.onBackgroundMessage((payload) => {
   console.log(
-    "[firebase-messaging-sw.js] Received background message ",
+    "[firebase-messaging-sw.js] Received background message:",
     payload
   )
-  // Customize notification here
-  const notificationTitle = "Background Message Title"
-  const notificationOptions = {
-    body: "Background Message body.",
-    icon: "/firebase-logo.png",
-  }
 
-  self.registration.showNotification(notificationTitle, notificationOptions)
+  const { title, body, icon } = payload.notification
+
+  self.registration.showNotification(title, {
+    body,
+    icon: icon || "/firebase-logo.png",
+  })
 })
