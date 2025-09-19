@@ -33,6 +33,8 @@ if ("serviceWorker" in navigator) {
 
 export const generateToken = async () => {
   const permission = await Notification.requestPermission()
+  console.log("Notification permission:", permission)
+
   if (permission === "granted") {
     try {
       const token = await getToken(messaging, {
@@ -40,6 +42,12 @@ export const generateToken = async () => {
           "BIK82ZYONmb7_1dzl3mFhz1P0uENN3ZQqcfT5bKdEqOgEkOOb3NHgpy8VU_v5WghoM_eA8U4UJMi0O60g5XG0DM",
       })
       console.log("FCM Token:", token)
+
+      // Store token in user's profile for server-side messaging
+      if (auth.currentUser && token) {
+        await storeUserToken(auth.currentUser.uid, token)
+      }
+
       return token
     } catch (err) {
       console.error("Error getting FCM token:", err)
@@ -49,11 +57,34 @@ export const generateToken = async () => {
   }
 }
 
-// Foreground messages (when app is open)
-export const onMessageListener = () =>
-  new Promise((resolve) => {
-    onMessage(messaging, (payload) => {
-      console.log("Foreground message:", payload)
-      resolve(payload)
+// Store user's FCM token in database
+export const storeUserToken = async (userId, token) => {
+  try {
+    const { ref, set } = await import("firebase/database")
+    const tokenRef = ref(database, `userTokens/${userId}`)
+    await set(tokenRef, {
+      token: token,
+      timestamp: Date.now(),
+      platform: "web",
     })
+    console.log("FCM token stored for user:", userId)
+  } catch (error) {
+    console.error("Error storing FCM token:", error)
+  }
+}
+
+// Foreground messages (when app is open)
+// export const onMessageListener = () =>
+//   new Promise((resolve) => {
+//     onMessage(messaging, (payload) => {
+//       console.log("Foreground message:", payload)
+//       resolve(payload)
+//     })
+//   })
+
+export const listenForegroundMessages = (callback) => {
+  return onMessage(messaging, (payload) => {
+    console.log("Foreground message:", payload)
+    if (callback) callback(payload)
   })
+}

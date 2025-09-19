@@ -2,13 +2,13 @@ import React, { useEffect, useState } from "react";
 import { ref, onValue } from "firebase/database";
 import { database, auth } from "../../firebase/firebase";
 import { useNavigate } from "react-router-dom";
-import { setupPresence } from "../../utils/presence";
+import { setupPresence, cleanupPresence } from "../../utils/presence";
 import { Settings, MoreVertical, Users, LogOut } from "lucide-react";
 import Profile from "../../components/Profile";
 import CreateGroupModal from "../../components/CreateGroupModal";
 import { showMessageNotification, getCurrentActiveChat } from "../../utils/notifications";
 
-export default function Sidebar({ isMobile }) { // <-- Receive the isMobile prop
+export default function Sidebar({ isMobile }) {
   const [users, setUsers] = useState([]);
   const [chatMeta, setChatMeta] = useState({});
   const [groups, setGroups] = useState([]);
@@ -91,7 +91,7 @@ export default function Sidebar({ isMobile }) { // <-- Receive the isMobile prop
 
             if (!isCurrentChatActive) {
               const senderName = user.fullName || user.email;
-              showMessageNotification(senderName, latestMessage.text, latestMessage.id, false);
+              showMessageNotification(senderName, latestMessage.text, latestMessage.id, false, user.uid);
             }
           }
 
@@ -172,7 +172,15 @@ export default function Sidebar({ isMobile }) { // <-- Receive the isMobile prop
 
             if (!isCurrentGroupActive) {
               const senderName = `${group.name}`;
-              showMessageNotification(senderName, latestMessage.text, latestMessage.id, true);
+              showMessageNotification(
+                senderName,
+                latestMessage.text,
+                latestMessage.id,
+                true,
+                null,
+                group.id,
+                group.name
+              );
             }
           }
 
@@ -227,7 +235,9 @@ export default function Sidebar({ isMobile }) { // <-- Receive the isMobile prop
     const uid = auth.currentUser?.uid;
     if (!uid) return;
 
+    console.log('Logging out from sidebar - setting user offline');
     await setupPresence(uid, false);
+    cleanupPresence();
     await auth.signOut();
     localStorage.removeItem("user");
     navigate("/");

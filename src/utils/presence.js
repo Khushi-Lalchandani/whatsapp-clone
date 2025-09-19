@@ -2,43 +2,84 @@
 import { ref, set, onDisconnect, onValue } from "firebase/database"
 import { database } from "../firebase/firebase"
 
+let connectedListener = null
+
 export const setupPresence = (userId, isOnline) => {
+  if (!userId) {
+    console.warn('setupPresence called without userId')
+    return
+  }
+
   const userStatusRef = ref(database, `/users/${userId}/status`)
-  const connectedRef = ref(database, '.info/connected')
+  const connectedRef = ref(database, ".info/connected")
+
+  // Clean up previous listeners if they exist
+  if (connectedListener) {
+    connectedListener()
+    connectedListener = null
+  }
 
   if (isOnline) {
-    // Set up real-time presence detection
-    onValue(connectedRef, (snapshot) => {
+    console.log(`Setting up presence for user: ${userId}`)
+    
+    // Listen to connection status
+    const unsubscribe = onValue(connectedRef, (snapshot) => {
       if (snapshot.val() === true) {
-        // User is connected
+        console.log('User connected to Firebase')
+        
         const status = {
           state: "online",
           last_changed: Date.now(),
         }
 
-        // Set user as online
+        // Set online status
         set(userStatusRef, status)
+          .then(() => {
+            console.log('Online status set successfully')
+          })
+          .catch((error) => {
+            console.error('Failed to set online status:', error)
+          })
 
-        // Set up automatic offline detection when user disconnects
+        // Set up offline trigger when disconnected
         onDisconnect(userStatusRef).set({
           state: "offline",
           last_changed: Date.now(),
         })
+          .then(() => {
+            console.log('Offline trigger set successfully')
+          })
+          .catch((error) => {
+            console.error('Failed to set offline trigger:', error)
+          })
       } else {
-        // User is disconnected - immediately set offline
-        const status = {
-          state: "offline",
-          last_changed: Date.now(),
-        }
-        set(userStatusRef, status)
+        console.log('User disconnected from Firebase')
       }
     })
+    
+    connectedListener = unsubscribe
   } else {
-    // Manual logout - set offline immediately
+    console.log(`Setting offline status for user: ${userId}`)
+    
     const status = {
       state: "offline",
       last_changed: Date.now(),
     }
+    
     return set(userStatusRef, status)
+      .then(() => {
+        console.log('Offline status set successfully')
+      })
+      .catch((error) => {
+        console.error('Failed to set offline status:', error)
+      })
+  }
+}
+
+// Clean up presence when user logs out or component unmounts
+export const cleanupPresence = () => {
+  if (connectedListener) {
+    connectedListener()
+    connectedListener = null
   }
 }

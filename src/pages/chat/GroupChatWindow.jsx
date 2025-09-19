@@ -6,11 +6,10 @@ import { Plus, Settings, MoreVertical, LogOut, ArrowLeft } from "lucide-react";
 import FileUploadModal from "../../components/FileUploadModal";
 import FilePreview from "../../components/FilePreview";
 import Profile from "../../components/Profile";
-import { setupPresence } from "../../utils/presence";
+import { setupPresence, cleanupPresence } from "../../utils/presence";
 
 function getMessageStatus(msg, totalMembers, onlineMembers = []) {
   if (!msg.seenBy) return "sent";
-  const seenCount = msg.seenBy.length;
   const onlineMembersWhoSaw = msg.seenBy.filter(uid =>
     uid !== msg.sender && onlineMembers.includes(uid)
   ).length;
@@ -49,7 +48,9 @@ export default function GroupChatWindow() {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
 
+    console.log('Logging out - setting user offline');
     await setupPresence(uid, false);
+    cleanupPresence();
     await auth.signOut();
     localStorage.removeItem("user");
     navigate("/");

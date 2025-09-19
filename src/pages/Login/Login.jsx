@@ -7,7 +7,7 @@ import {
 import { set, ref } from "firebase/database";
 import { useNavigate } from "react-router-dom";
 import LoadingSpinner from "../../components/LoadingSpinner";
-import { setupPresence } from "../../utils/presence";
+
 
 export default function AuthForm() {
   const navigate = useNavigate();
@@ -24,7 +24,6 @@ export default function AuthForm() {
 
     try {
       if (!isLogin && password === confirmPassword) {
-        // Sign Up
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 

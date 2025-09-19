@@ -3,26 +3,13 @@ import Sidebar from "./Sidebar";
 import MainWindow from "./MainWindow";
 import GroupChatWindow from "./GroupChatWindow";
 import { useParams, useLocation } from "react-router-dom";
-import { generateToken, messaging } from "../../firebase/firebase";
-import { onMessage } from "firebase/messaging";
-import { onMessageListener } from "../../firebase/firebase";
 
 const ChatWindow = () => {
   const { chatId, groupId } = useParams();
   const location = useLocation();
-
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-
   useEffect(() => {
-
-    generateToken();
-    onMessageListener().then((payload) => {
-      new Notification(payload.notification.title, {
-        body: payload.notification.body,
-        icon: "/firebase-logo.png",
-      });
-    });
 
   }, []);
   useEffect(() => {

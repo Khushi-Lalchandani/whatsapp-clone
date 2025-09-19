@@ -14,7 +14,7 @@ import Profile from "../../components/Profile";
 import UserPreview from "./UserPreview";
 import FileUploadModal from "../../components/FileUploadModal";
 import FilePreview from "../../components/FilePreview";
-import { setupPresence } from "../../utils/presence";
+import { setupPresence, cleanupPresence } from "../../utils/presence";
 
 function getLastSeenText(lastOnline) {
   if (!lastOnline) return "Offline";
@@ -50,7 +50,9 @@ export default function MainWindow() {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
 
+    console.log('Logging out - setting user offline');
     await setupPresence(uid, false);
+    cleanupPresence();
     await auth.signOut();
     localStorage.removeItem("user");
     navigate("/");
