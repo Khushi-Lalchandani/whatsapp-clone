@@ -11,47 +11,97 @@ setTimeout(() => {
   isInitialLoad = false
 }, 1000)
 
-// Check if app is in foreground
+// Check if app is in foreground (Edge-compatible)
 export const isAppInForeground = () => {
-  return !document.hidden && document.visibilityState === "visible"
+  // Edge compatibility: Check multiple properties
+  if (typeof document.hidden !== 'undefined') {
+    return !document.hidden && document.visibilityState === "visible"
+  }
+  // Fallback for older Edge versions
+  if (typeof document.msHidden !== 'undefined') {
+    return !document.msHidden
+  }
+  if (typeof document.webkitHidden !== 'undefined') {
+    return !document.webkitHidden
+  }
+  // Final fallback
+  return document.hasFocus && document.hasFocus()
 }
 
-// Show browser notification (for background)
+// Show browser notification (Edge-compatible)
 export const showBrowserNotification = (
   title,
   body,
   icon = "/firebase-logo.png",
   data = {}
 ) => {
-  if ("Notification" in window && Notification.permission === "granted") {
-    console.log("Showing browser notification:", title, body)
-    const notification = new Notification(title, {
-      body,
-      icon,
-      badge: icon,
+  // Check notification support and permission
+  if (!("Notification" in window)) {
+    console.warn("Browser does not support notifications")
+    return null
+  }
+
+  if (Notification.permission !== "granted") {
+    console.warn("Notification permission not granted. Current permission:", Notification.permission)
+    return null
+  }
+
+  try {
+    console.log("Creating browser notification:", title, body)
+    
+    // Edge-compatible notification options
+    const notificationOptions = {
+      body: body,
+      icon: icon,
       tag: data.messageId || "message", // Prevent duplicate notifications
-      requireInteraction: true, // Keep notification visible until user interacts
       data: data, // Store additional data for click handling
-    })
+    }
+    
+    // Edge doesn't fully support some newer notification features
+    // Only add features that Edge supports
+    const userAgent = navigator.userAgent.toLowerCase()
+    const isEdge = userAgent.includes('edge') || userAgent.includes('edg/')
+    
+    if (!isEdge) {
+      // Features that may not work in Edge
+      notificationOptions.badge = icon
+      notificationOptions.requireInteraction = true
+      notificationOptions.silent = false
+    }
 
-    // Handle notification click
+    const notification = new Notification(title, notificationOptions)
+
+    // Handle notification click (Edge-compatible)
     notification.onclick = (event) => {
-      event.preventDefault()
-      window.focus() // Focus the window
+      try {
+        event.preventDefault()
+        
+        // Focus window first
+        if (window.focus) {
+          window.focus()
+        }
+        
+        // Navigate to chat if data provided
+        if (data.isGroup && data.groupId) {
+          window.location.href = `/chat/group/${data.groupId}`
+        } else if (data.chatId) {
+          window.location.href = `/chat/${data.chatId}`
+        }
 
-      // Navigate to chat if data provided
-      if (data.isGroup && data.groupId) {
-        window.location.href = `/chat/group/${data.groupId}`
-      } else if (data.chatId) {
-        window.location.href = `/chat/${data.chatId}`
+        notification.close()
+      } catch (clickError) {
+        console.error("Error handling notification click:", clickError)
       }
+    }
 
-      notification.close()
+    // Handle notification errors
+    notification.onerror = (error) => {
+      console.error("Notification error:", error)
     }
 
     return notification
-  } else {
-    console.warn("Browser notifications not supported or permission denied")
+  } catch (error) {
+    console.error("Error creating notification:", error)
     return null
   }
 }

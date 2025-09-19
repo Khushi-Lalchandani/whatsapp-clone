@@ -23,83 +23,88 @@ firebase.initializeApp({
 // Get messaging instance
 const messaging = firebase.messaging()
 
-// Handle background messages
+// Handle background messages (Edge-compatible)
 messaging.onBackgroundMessage((payload) => {
   console.log("Background message received:", payload)
 
-  // Extract notification data
-  const notification = payload.notification || {}
-  const data = payload.data || {}
+  try {
+    // Extract notification data
+    const notification = payload.notification || {}
+    const data = payload.data || {}
 
-  // Create enhanced notification content
-  let notificationTitle = notification.title || "New Message"
-  let notificationBody = notification.body || "You have a new message"
+    // Create enhanced notification content
+    let notificationTitle = notification.title || "New Message"
+    let notificationBody = notification.body || "You have a new message"
 
-  // If we have custom data, format it better
-  if (data.senderName && data.message) {
-    if (data.isGroup === "true" && data.groupName) {
-      notificationTitle = data.groupName
-      notificationBody = `${data.senderName}: ${data.message}`
-    } else {
-      notificationTitle = data.senderName
-      notificationBody = data.message
+    // If we have custom data, format it better
+    if (data.senderName && data.message) {
+      if (data.isGroup === "true" && data.groupName) {
+        notificationTitle = data.groupName
+        notificationBody = `${data.senderName}: ${data.message}`
+      } else {
+        notificationTitle = data.senderName
+        notificationBody = data.message
+      }
     }
-  }
 
-  // Format message content for different types
-  if (notificationBody.includes("📁") || notificationBody.includes("file:")) {
-    notificationBody = `📁 ${data.senderName || "Someone"} sent a file`
-  } else if (
-    notificationBody.includes("🖼️") ||
-    notificationBody.includes("image:")
-  ) {
-    notificationBody = `🖼️ ${data.senderName || "Someone"} sent an image`
-  } else if (
-    notificationBody.includes("🎵") ||
-    notificationBody.includes("audio:")
-  ) {
-    notificationBody = `🎵 ${
-      data.senderName || "Someone"
-    } sent an audio message`
-  } else if (
-    notificationBody.includes("🎥") ||
-    notificationBody.includes("video:")
-  ) {
-    notificationBody = `🎥 ${data.senderName || "Someone"} sent a video`
-  }
+    // Format message content for different types (simplified for Edge)
+    if (notificationBody.includes("file:")) {
+      notificationBody = `${data.senderName || "Someone"} sent a file`
+    } else if (notificationBody.includes("image:")) {
+      notificationBody = `${data.senderName || "Someone"} sent an image`
+    } else if (notificationBody.includes("audio:")) {
+      notificationBody = `${data.senderName || "Someone"} sent an audio message`
+    } else if (notificationBody.includes("video:")) {
+      notificationBody = `${data.senderName || "Someone"} sent a video`
+    }
 
-  const notificationOptions = {
-    body: notificationBody,
-    icon:
-      notification.icon || payload.notification?.image || "/firebase-logo.png",
-    badge: "/firebase-logo.png",
-    tag: data.messageId || "message", // Prevent duplicate notifications
-    requireInteraction: true,
-    data: {
-      ...data,
-      clickAction:
-        data.isGroup === "true"
-          ? `/chat/group/${data.groupId}`
-          : `/chat/${data.chatId}`,
-      messageText: notificationBody, // Store the formatted message
-    }, // Pass through custom data
-    actions: [
-      {
-        action: "open_chat",
-        title: "💬 Open Chat",
+    // Edge-compatible notification options
+    const notificationOptions = {
+      body: notificationBody,
+      icon: notification.icon || payload.notification?.image || "/firebase-logo.png",
+      tag: data.messageId || "message", // Prevent duplicate notifications
+      data: {
+        ...data,
+        clickAction:
+          data.isGroup === "true"
+            ? `/chat/group/${data.groupId}`
+            : `/chat/${data.chatId}`,
+        messageText: notificationBody,
       },
-      {
-        action: "mark_read",
-        title: "✓ Mark as Read",
-      },
-    ],
-    silent: false,
-    vibrate: [200, 100, 200], // Vibration pattern for mobile
-    timestamp: Date.now(),
-  }
+    }
 
-  console.log("Showing notification:", notificationTitle, notificationBody)
-  self.registration.showNotification(notificationTitle, notificationOptions)
+    // Only add advanced features if they're supported
+    // Edge may not support all notification features
+    try {
+      // Test if advanced features are supported
+      notificationOptions.badge = "/firebase-logo.png"
+      notificationOptions.requireInteraction = false // Edge has issues with this
+      notificationOptions.silent = false
+      notificationOptions.timestamp = Date.now()
+      
+      // Simplified actions for Edge compatibility
+      notificationOptions.actions = [
+        {
+          action: "open_chat",
+          title: "Open Chat",
+        }
+      ]
+    } catch (e) {
+      console.log("Some notification features not supported:", e)
+    }
+
+    console.log("Showing notification:", notificationTitle, notificationBody)
+    self.registration.showNotification(notificationTitle, notificationOptions)
+  } catch (error) {
+    console.error("Error in background message handler:", error)
+    
+    // Fallback notification
+    self.registration.showNotification("New Message", {
+      body: "You have received a new message",
+      icon: "/firebase-logo.png",
+      tag: "fallback"
+    })
+  }
 })
 
 // Handle notification click
